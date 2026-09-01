@@ -33,7 +33,7 @@ export default function DashboardScreen() {
           <Text numberOfLines={1} style={styles.roomText}>{selectedRoom?.name || 'Stock Room'}</Text>
           <ChevronDown size={18} color={BRAND.violet} strokeWidth={2.2} />
         </Pressable>
-        <Pressable accessibilityLabel="Notifications" onPress={() => router.push('/notifications')} style={styles.bell}>
+        <Pressable accessibilityLabel="Notifications" onPress={() => router.push('/notifications' as never)} style={styles.bell}>
           <Bell size={29} color={BRAND.inkSoft} strokeWidth={1.9} />
           {workspace.summary.unreadNotifications > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{Math.min(99, workspace.summary.unreadNotifications)}</Text></View> : null}
         </Pressable>
@@ -48,17 +48,17 @@ export default function DashboardScreen() {
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<Box size={26} color={BRAND.green} />} label="On Hand" value={workspace.summary.onHand} accent="green" onPress={() => router.push('/inventory?filter=ALL')} /></View>
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<Bookmark size={26} color={BRAND.blue} />} label="Reserved" value={workspace.summary.reserved} accent="blue" onPress={() => router.push('/inventory?filter=RESERVED')} /></View>
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<AlertTriangle size={27} color={BRAND.amber} />} label="Low Stock" value={workspace.summary.lowStock} accent="amber" onPress={() => router.push('/inventory?filter=LOW')} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<ClipboardList size={27} color={BRAND.violet} />} label="Pending Tasks" value={workspace.summary.pendingTasks} accent="violet" onPress={() => router.push('/tasks')} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<ClipboardList size={27} color={BRAND.violet} />} label="Pending Tasks" value={workspace.summary.pendingTasks} accent="violet" onPress={() => router.push('/tasks' as never)} /></View>
       </View>
 
       <View style={[styles.grid, styles.actionGrid]}>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Download size={29} color={BRAND.green} />} label="Stock In" accent="green" onPress={() => router.push('/tasks?kind=STOCK_IN')} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Upload size={29} color={BRAND.red} />} label="Release / Issue" accent="red" onPress={() => router.push('/tasks?kind=RELEASE')} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<RotateCcw size={30} color={BRAND.blue} />} label="Return Item" accent="blue" onPress={() => router.push('/return-item')} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<ClipboardCheck size={29} color={BRAND.violet} />} label="Physical Count" accent="violet" onPress={() => router.push('/tasks?kind=COUNT')} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Download size={29} color={BRAND.green} />} label="Stock In" accent="green" onPress={() => router.push('/tasks?kind=STOCK_IN' as never)} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Upload size={29} color={BRAND.red} />} label="Release / Issue" accent="red" onPress={() => router.push('/tasks?kind=RELEASE' as never)} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<RotateCcw size={30} color={BRAND.blue} />} label="Return Item" accent="blue" onPress={() => router.push('/return-item' as never)} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<ClipboardCheck size={29} color={BRAND.violet} />} label="Physical Count" accent="violet" onPress={() => router.push('/tasks?kind=COUNT' as never)} /></View>
       </View>
 
-      <SectionTitle action="View all" onAction={() => router.push('/tasks')}>Today’s Tasks</SectionTitle>
+      <SectionTitle action="View all" onAction={() => router.push('/tasks' as never)}>Today’s Tasks</SectionTitle>
       <Surface style={styles.taskList}>
         {today.length ? today.map((task, index) => {
           const accent = taskAccent(task);

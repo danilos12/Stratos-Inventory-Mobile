@@ -52,6 +52,14 @@
           "barcodeScannerEnabled": true
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Stratos Inventory to attach inventory evidence from your photo library.",
+          "cameraPermission": "Allow Stratos Inventory to photograph delivery receipts and returned items.",
+          "microphonePermission": false
+        }
+      ],
       "@react-native-google-signin/google-signin"
     ],
     "experiments": {

@@ -4,19 +4,19 @@ import type { OperationalTask } from '@/types/domain';
 
 export function openOperationalTask(task: OperationalTask) {
   if (task.kind === 'STOCK_IN') {
-    router.push({ pathname: '/stock-in/[poId]', params: { poId: String(task.entityId), itemId: task.itemId ? String(task.itemId) : '' } });
+    router.push({ pathname: '/stock-in/[poId]', params: { poId: String(task.entityId), itemId: task.itemId ? String(task.itemId) : '' } } as never);
     return;
   }
   if (task.kind === 'RELEASE') {
-    router.push({ pathname: '/release-work/[id]', params: { id: String(task.entityId) } });
+    router.push({ pathname: '/release-work/[id]', params: { id: String(task.entityId) } } as never);
     return;
   }
   if (task.kind === 'RETURN') {
-    router.push({ pathname: '/return-item', params: { outId: String(task.entityId) } });
+    router.push({ pathname: '/return-item', params: { outId: String(task.entityId) } } as never);
     return;
   }
   if (task.kind === 'COUNT') {
-    router.push({ pathname: '/physical-count/[id]', params: { id: String(task.entityId) } });
+    router.push({ pathname: '/physical-count/[id]', params: { id: String(task.entityId) } } as never);
     return;
   }
   if (task.itemId || task.entityId) {

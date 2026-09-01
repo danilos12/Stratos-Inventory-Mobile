@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { ClipboardList, Clock3, House, ScanLine, UserRound } from 'lucide-react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { LoadingScreen } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
@@ -29,11 +29,6 @@ export default function TabsLayout() {
         title: 'Scan',
         tabBarIcon: () => <ScanLine color={BRAND.white} size={30} strokeWidth={2.2} />,
         tabBarIconStyle: styles.scanIcon,
-        tabBarButton: (props) => (
-          <Pressable {...props} style={[props.style, styles.scanButton]}>
-            <View style={styles.scanHalo}>{props.children}</View>
-          </Pressable>
-        ),
       }} />
       <Tabs.Screen name="history" options={{ title: 'History', tabBarIcon: ({ color, size }) => <Clock3 color={color} size={size} strokeWidth={1.9} /> }} />
       <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} strokeWidth={1.9} /> }} />
