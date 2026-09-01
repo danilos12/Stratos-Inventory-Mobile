@@ -1,38 +1,58 @@
 {
   "expo": {
-    "name": "Inventory-Mobile",
-    "slug": "Inventory-Mobile",
+    "name": "Stratos Inventory",
+    "slug": "stratos-field-inventory",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "inventorymobile",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/stratos-app-icon.png",
+    "scheme": "stratosfield",
+    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/stratos-app-icon.png",
+      "bundleIdentifier": "com.stratos.fieldinventory",
+      "buildNumber": "1"
     },
     "android": {
+      "icon": "./assets/images/stratos-app-icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/images/stratos-app-icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.stratos.fieldinventory",
+      "versionCode": 1
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/stratos-app-icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#000000",
+          "image": "./assets/images/stratos-logo.png",
+          "imageWidth": 280,
+          "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Stratos Inventory to use Face ID to secure organization access."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Stratos Inventory to scan inventory labels.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
