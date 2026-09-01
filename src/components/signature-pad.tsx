@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { RotateCcw, Signature } from 'lucide-react-native';
@@ -9,21 +9,22 @@ type Point = [number, number];
 
 export function SignaturePad({ value, onChange }: { value: Point[][]; onChange: (strokes: Point[][]) => void }) {
   const [current, setCurrent] = useState<Point[]>([]);
-  const currentRef = useRef<Point[]>([]);
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (event) => {
       const point: Point = [event.nativeEvent.locationX, event.nativeEvent.locationY];
-      currentRef.current = [point]; setCurrent([point]);
+      setCurrent([point]);
     },
     onPanResponderMove: (event) => {
       const point: Point = [event.nativeEvent.locationX, event.nativeEvent.locationY];
-      currentRef.current = [...currentRef.current, point]; setCurrent(currentRef.current);
+      setCurrent((stroke) => [...stroke, point]);
     },
     onPanResponderRelease: () => {
-      if (currentRef.current.length > 1) onChange([...value, currentRef.current]);
-      currentRef.current = []; setCurrent([]);
+      setCurrent((stroke) => {
+        if (stroke.length > 1) onChange([...value, stroke]);
+        return [];
+      });
     },
   }), [onChange, value]);
 
@@ -41,7 +42,7 @@ export function SignaturePad({ value, onChange }: { value: Point[][]; onChange: 
 
 const styles = StyleSheet.create({
   pad: { height: 150, borderRadius: 14, borderWidth: 1.3, borderStyle: 'dashed', borderColor: BRAND.violet, backgroundColor: BRAND.white, overflow: 'hidden' },
-  placeholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  placeholder: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', gap: 7 },
   placeholderText: { color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 },
   clear: { alignSelf: 'flex-end', minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 4 },
   clearText: { color: BRAND.red, fontFamily: TYPE.body, fontSize: 12, fontWeight: '700' },

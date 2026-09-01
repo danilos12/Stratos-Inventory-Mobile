@@ -148,8 +148,8 @@ export function WorkflowBottomBar({ active = 'tasks' }: { active?: 'home' | 'tas
       {items.map((item) => {
         const selected = active === item.key;
         const Icon = item.icon;
-        if (item.key === 'scan') return <Pressable key={item.key} onPress={() => router.navigate(item.href)} style={styles.workflowScanWrap}><View style={styles.workflowScan}><Icon size={28} color={BRAND.white} strokeWidth={2.1} /></View><Text style={styles.workflowLabel}>Scan</Text></Pressable>;
-        return <Pressable key={item.key} onPress={() => router.navigate(item.href)} style={styles.workflowItem}><Icon size={25} color={selected ? BRAND.red : BRAND.inkSoft} strokeWidth={selected ? 2.3 : 1.8} /><Text style={[styles.workflowLabel, selected && styles.workflowLabelActive]}>{item.label}</Text></Pressable>;
+        if (item.key === 'scan') return <Pressable key={item.key} onPress={() => router.navigate(item.href as never)} style={styles.workflowScanWrap}><View style={styles.workflowScan}><Icon size={28} color={BRAND.white} strokeWidth={2.1} /></View><Text style={styles.workflowLabel}>Scan</Text></Pressable>;
+        return <Pressable key={item.key} onPress={() => router.navigate(item.href as never)} style={styles.workflowItem}><Icon size={25} color={selected ? BRAND.red : BRAND.inkSoft} strokeWidth={selected ? 2.3 : 1.8} /><Text style={[styles.workflowLabel, selected && styles.workflowLabelActive]}>{item.label}</Text></Pressable>;
       })}
     </View>
   );

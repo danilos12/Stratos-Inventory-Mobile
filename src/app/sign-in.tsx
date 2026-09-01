@@ -47,15 +47,16 @@ export default function SignInScreen() {
     setGoogleConfigLoading(true);
     setGoogleConfigError(null);
     try {
-      const [config, organizationRows] = await Promise.all([fetchGoogleAuthConfig(), fetchRegistrationAffiliates()]);
+      const config = await fetchGoogleAuthConfig();
       if (!config.configured || !config.clientId) {
         throw new Error('The organization server responded, but its Google OAuth configuration is incomplete.');
       }
       const configuredAffiliateId = Number(process.env.EXPO_PUBLIC_STRATOS_AFFILIATE_ID);
+      const organizationRows = await fetchRegistrationAffiliates().catch(() => []);
       const registrationOrganization = organizationRows.find((organization) => organization.id === configuredAffiliateId)
         || organizationRows.find((organization) => organization.code.toUpperCase() === 'STRATOS')
         || (organizationRows.length === 1 ? organizationRows[0] : null);
-      setRegistrationAffiliateId(registrationOrganization?.id || null);
+      setRegistrationAffiliateId(registrationOrganization?.id || (Number.isInteger(configuredAffiliateId) && configuredAffiliateId > 0 ? configuredAffiliateId : null));
       setRegistrationRole(defaultRegistrationRole(registrationOrganization));
       const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
       GoogleSignin.configure({

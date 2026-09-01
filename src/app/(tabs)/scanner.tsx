@@ -6,18 +6,20 @@ import { Camera, Flashlight, RotateCcw, ScanLine } from 'lucide-react-native';
 
 import { Body, Card, LoadingScreen, Pill, PrimaryButton, Screen, Title } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
-import { findInventoryByCode } from '@/lib/api';
+import { resolveInventoryScan } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
-import type { InventoryItem } from '@/types/domain';
+import { useSyncedData } from '@/providers/data-provider';
+import type { ScanResolution } from '@/types/domain';
 
 export default function ScannerScreen() {
   const { session } = useAuth();
+  const { selectedWarehouseId } = useSyncedData();
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState(true);
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<InventoryItem | null>(null);
+  const [result, setResult] = useState<ScanResolution | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
@@ -29,15 +31,25 @@ export default function ScannerScreen() {
     if (scanned || !session) return;
     setScanned(true); setLoading(true); setMessage(null);
     try {
-      const item = await findInventoryByCode(session.token, data);
-      setResult(item);
-      if (!item) setMessage('No match for this code.');
+      const resolved = await resolveInventoryScan(session.token, data, selectedWarehouseId);
+      setResult(resolved);
+      if (!resolved) setMessage('No match for this code.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Lookup failed.');
     } finally { setLoading(false); }
   }
 
   function reset() { setScanned(false); setResult(null); setMessage(null); }
+
+  function openResult() {
+    if (!result) return;
+    if (result.type === 'ITEM') router.push({ pathname: '/inventory/[id]', params: { id: String(result.id) } });
+    else if (result.type === 'RELEASE') router.push({ pathname: '/release-work/[id]', params: { id: String(result.id) } } as never);
+    else if (result.type === 'RETURN') router.push({ pathname: '/return-item', params: { outId: String(result.id), code: result.code } } as never);
+    else if (result.type === 'COUNT') router.push({ pathname: '/physical-count/[id]', params: { id: String(result.id) } } as never);
+    else if (result.type === 'PURCHASE_ORDER') router.push({ pathname: '/stock-in/[poId]', params: { poId: String(result.id) } } as never);
+    else { setMessage(`Location ${result.code} verified. Open an assigned count task to continue.`); setResult(null); }
+  }
 
   if (!permission) return <LoadingScreen label="Checking camera" />;
   if (!permission.granted) {
@@ -55,8 +67,8 @@ export default function ScannerScreen() {
       </View>
       {loading ? <Card style={styles.resultCard}><Body>Looking up…</Body></Card> : result ? (
         <Card style={styles.resultCard}>
-          <View style={styles.resultTop}><View style={styles.resultMain}><Text style={styles.resultName}>{result.name}</Text><Text style={styles.resultCode}>{result.sku}</Text></View><Pill label={`${result.totalAvailable} available`} tone={result.totalAvailable > 0 ? 'green' : 'red'} /></View>
-          <PrimaryButton label="Open item" onPress={() => router.push({ pathname: '/inventory/[id]', params: { id: String(result.id) } })} />
+          <View style={styles.resultTop}><View style={styles.resultMain}><Text style={styles.resultName}>{result.item?.name || result.title || result.type.replace('_', ' ')}</Text><Text style={styles.resultCode}>{result.item?.sku || result.code}</Text></View><Pill label={result.item ? `${result.item.totalAvailable} available` : result.type.replace('_', ' ')} tone={result.item && result.item.totalAvailable <= 0 ? 'red' : 'green'} /></View>
+          <PrimaryButton label={`Open ${result.type.toLowerCase().replace('_', ' ')}`} onPress={openResult} />
         </Card>
       ) : message ? <Card style={styles.resultCard}><Body style={styles.error}>{message}</Body></Card> : null}
       {scanned ? <Pressable onPress={reset} style={styles.scanAgain}><RotateCcw size={14} color={BRAND.inkSoft} /><Text style={styles.scanAgainText}>Scan again</Text></Pressable> : null}

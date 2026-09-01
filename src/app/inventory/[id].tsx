@@ -7,7 +7,7 @@ import {
   RefreshCcw, Shield, ShieldCheck, TrendingUp, Upload,
 } from 'lucide-react-native';
 
-import { DetailRow, IconBadge, OutlineButton, PageHeader, RedButton, SectionTitle, StatCard, StatusChip, Surface, WorkflowBottomBar } from '@/components/inventory-ui';
+import { DetailRow, OutlineButton, PageHeader, RedButton, SectionTitle, StatCard, StatusChip, Surface, WorkflowBottomBar } from '@/components/inventory-ui';
 import { EmptyState, LoadingScreen, Screen } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
 import { absoluteAssetUrl, fetchInventoryItem } from '@/lib/api';
@@ -34,7 +34,7 @@ export default function InventoryDetailScreen() {
     finally { setLoading(false); }
   }, [catalogLoading, inventory, itemId, session]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const task = setTimeout(load, 0); return () => clearTimeout(task); }, [load]);
   const isAvailable = useMemo(() => Boolean(item && Number(item.totalAvailable) > 0 && item.conditionStatus !== 'DEFECTIVE'), [item]);
 
   if (loading && !item) return <LoadingScreen label="Loading item" />;
@@ -78,9 +78,9 @@ export default function InventoryDetailScreen() {
       <View style={styles.actions}>
         <RedButton disabled={!isAvailable} icon={<Upload size={24} color={BRAND.white} />} onPress={() => router.push({ pathname: '/release/[itemId]', params: { itemId: String(item.id) } })}>Release / Issue</RedButton>
         <View style={styles.secondary}>
-          <OutlineButton style={styles.secondaryButton} accent="green" icon={<Download size={20} color={BRAND.green} />} onPress={() => router.push('/tasks?kind=STOCK_IN')}>Stock In</OutlineButton>
-          <OutlineButton style={styles.secondaryButton} accent="blue" icon={<RefreshCcw size={20} color={BRAND.blue} />} onPress={() => router.push({ pathname: '/return-item', params: { itemId: String(item.id), code } })}>Return</OutlineButton>
-          <OutlineButton style={styles.secondaryButton} accent="violet" icon={<ClipboardCheck size={20} color={BRAND.violet} />} onPress={() => router.push('/tasks?kind=COUNT')}>Count</OutlineButton>
+          <OutlineButton style={styles.secondaryButton} accent="green" icon={<Download size={20} color={BRAND.green} />} onPress={() => router.push('/tasks?kind=STOCK_IN' as never)}>Stock In</OutlineButton>
+          <OutlineButton style={styles.secondaryButton} accent="blue" icon={<RefreshCcw size={20} color={BRAND.blue} />} onPress={() => router.push({ pathname: '/return-item', params: { itemId: String(item.id), code } } as never)}>Return</OutlineButton>
+          <OutlineButton style={styles.secondaryButton} accent="violet" icon={<ClipboardCheck size={20} color={BRAND.violet} />} onPress={() => router.push('/tasks?kind=COUNT' as never)}>Count</OutlineButton>
         </View>
       </View>
     </Screen>

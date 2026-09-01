@@ -11,12 +11,12 @@ import { useSyncedData } from '@/providers/data-provider';
 
 export default function AccountScreen() {
   const { session, offlineSession, signOut } = useAuth();
-  const { inventory, projects, lastSyncedAt } = useSyncedData();
+  const { inventory, lastSyncedAt } = useSyncedData();
 
-  function confirmSignOut() {
-    Alert.alert('Sign out?', 'Session and offline cache will be removed from this device.', [
+  function confirmSwitchEmail() {
+    Alert.alert('Use a different email?', 'The current session and its offline inventory cache will be removed from this device.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: async () => { await signOut(); router.replace('/sign-in'); } },
+      { text: 'Switch email', style: 'destructive', onPress: async () => { await signOut(); router.replace('/sign-in'); } },
     ]);
   }
 
@@ -35,7 +35,7 @@ export default function AccountScreen() {
 
       <Card style={styles.details}>
         <Detail label="Workspace" value={session?.workspace.affiliate?.name || 'Stratos'} />
-        <Detail label="Snapshot" value={`${inventory.length} items · ${projects.length} projects`} />
+        <Detail label="Inventory snapshot" value={`${inventory.length} items`} />
         <Detail label="Last sync" value={lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'Not synced'} last />
       </Card>
 
@@ -48,7 +48,7 @@ export default function AccountScreen() {
 
       <Text style={styles.endpoint} numberOfLines={1}>{API_BASE_URL}</Text>
 
-      <Pressable onPress={confirmSignOut} style={styles.signOut}><Text style={styles.signOutText}>Sign out</Text></Pressable>
+      <Pressable onPress={confirmSwitchEmail} style={styles.signOut}><Text style={styles.signOutText}>Use a different email</Text></Pressable>
     </Screen>
   );
 }

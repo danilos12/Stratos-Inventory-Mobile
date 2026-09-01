@@ -45,9 +45,14 @@ function RootNavigator() {
         <Stack.Screen name="biometric-setup" options={{ headerShown: false }} />
         <Stack.Screen name="pending-approval" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="inventory/[id]" options={{ title: 'Item' }} />
+        <Stack.Screen name="inventory/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="projects/[id]" options={{ title: 'Project' }} />
         <Stack.Screen name="release/[itemId]" options={{ title: 'Stock-out', presentation: 'modal' }} />
+        <Stack.Screen name="notifications" options={{ headerShown: false }} />
+        <Stack.Screen name="stock-in/[poId]" options={{ headerShown: false }} />
+        <Stack.Screen name="release-work/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="return-item" options={{ headerShown: false }} />
+        <Stack.Screen name="physical-count/[id]" options={{ headerShown: false }} />
       </Stack>
     </>
   );

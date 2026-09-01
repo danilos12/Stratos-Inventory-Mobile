@@ -13,6 +13,7 @@ import type {
   PhysicalCountSession,
   PurchaseOrderWork,
   ReleaseWorkOrder,
+  ScanResolution,
   IssuedItemWork,
   LoginResponse,
   MobileBiometricCredential,
@@ -219,7 +220,11 @@ export async function markNotificationRead(token: string, id: number) {
 
 export async function fetchPurchaseOrderWork(token: string, id: number) {
   const response = await apiRequest<any>(`/api/inventory/purchase-orders/${id}`, { token });
-  return (response?.data || response) as PurchaseOrderWork;
+  const raw = response?.data || response;
+  return {
+    ...raw,
+    items: (raw.items || raw.PurchaseOrderItem || []).map((line: any) => ({ ...line, item: line.item || line.InventoryItem || null })),
+  } as PurchaseOrderWork;
 }
 
 export async function receivePurchaseOrder(token: string, id: number, input: {
@@ -316,6 +321,18 @@ export async function findInventoryByCode(token: string, code: string) {
     [item.barcode, item.sku, item.productCode, item.serialNumber]
       .some((value) => String(value || '').toLowerCase() === normalized),
   ) || rows[0] || null;
+}
+
+export async function resolveInventoryScan(token: string, code: string, warehouseId?: number | null) {
+  try {
+    return await apiRequest<ScanResolution>('/api/mobile/inventory/resolve-code', {
+      method: 'POST', token, body: JSON.stringify({ code: code.trim(), warehouseId }),
+    });
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) throw error;
+    const item = await findInventoryByCode(token, code);
+    return item ? { type: 'ITEM', id: item.id, code, item } satisfies ScanResolution : null;
+  }
 }
 
 export async function fetchProject(token: string, projectId: number): Promise<ProjectDetails> {

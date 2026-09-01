@@ -60,6 +60,7 @@ export interface InventoryItem {
   description?: string | null;
   unit?: string | null;
   supplier?: string | null;
+  warrantyPeriod?: string | null;
   location?: string | null;
   imageUrl?: string | null;
   minStock: number;
@@ -210,6 +211,15 @@ export interface AppNotification {
   isRead: boolean;
   createdAt: string;
   actionUrl?: string | null;
+}
+
+export interface ScanResolution {
+  type: 'ITEM' | 'RELEASE' | 'RETURN' | 'COUNT' | 'PURCHASE_ORDER' | 'LOCATION';
+  id: number;
+  code: string;
+  item?: InventoryItem | null;
+  taskId?: string | null;
+  title?: string | null;
 }
 
 export interface InventoryMovement {
