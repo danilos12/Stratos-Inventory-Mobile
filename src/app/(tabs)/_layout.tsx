@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from 'expo-router';
-import { ClipboardList, Clock3, House, ScanLine, UserRound } from 'lucide-react-native';
+import { FolderKanban, House, ReceiptText, ScanLine, UserRound } from 'lucide-react-native';
 import { StyleSheet } from 'react-native';
 
 import { LoadingScreen } from '@/components/ui';
@@ -24,16 +24,16 @@ export default function TabsLayout() {
       sceneStyle: { backgroundColor: BRAND.paper },
     }}>
       <Tabs.Screen name="dashboard" options={{ title: 'Home', tabBarIcon: ({ color, size }) => <House color={color} size={size} strokeWidth={1.9} /> }} />
-      <Tabs.Screen name="tasks" options={{ title: 'Tasks', tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} strokeWidth={1.9} /> }} />
+      <Tabs.Screen name="projects" options={{ title: 'Projects', tabBarIcon: ({ color, size }) => <FolderKanban color={color} size={size} strokeWidth={1.9} /> }} />
       <Tabs.Screen name="scanner" options={{
         title: 'Scan',
         tabBarIcon: () => <ScanLine color={BRAND.white} size={30} strokeWidth={2.2} />,
         tabBarIconStyle: styles.scanIcon,
       }} />
-      <Tabs.Screen name="history" options={{ title: 'History', tabBarIcon: ({ color, size }) => <Clock3 color={color} size={size} strokeWidth={1.9} /> }} />
+      <Tabs.Screen name="history" options={{ title: 'Transactions', tabBarIcon: ({ color, size }) => <ReceiptText color={color} size={size} strokeWidth={1.9} /> }} />
       <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} strokeWidth={1.9} /> }} />
       <Tabs.Screen name="inventory" options={{ href: null }} />
-      <Tabs.Screen name="projects" options={{ href: null }} />
+      <Tabs.Screen name="tasks" options={{ href: null }} />
     </Tabs>
   );
 }

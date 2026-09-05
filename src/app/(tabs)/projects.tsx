@@ -1,26 +1,32 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { EmptyState, Pill, Screen, SearchField, Title } from '@/components/ui';
-import { BRAND, PROJECT_STAGES, STAGE_LABELS, TYPE, stageIndex } from '@/constants/brand';
+import { BRAND, TYPE } from '@/constants/brand';
 import { useSyncedData } from '@/providers/data-provider';
+import { useAuth } from '@/providers/auth-provider';
+import { fetchInventoryProjects } from '@/lib/api';
+import type { InventoryProjectSummary } from '@/types/domain';
 
 type ProjectFilter = 'ACTIVE' | 'COMPLETED' | 'ALL';
 
 export default function ProjectsScreen() {
-  const { projects, refreshing, refresh } = useSyncedData();
+  const { session } = useAuth();
+  const { refreshing, refresh } = useSyncedData();
+  const [summaries, setSummaries] = useState<InventoryProjectSummary[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>('ACTIVE');
+  useEffect(() => { if (session) void fetchInventoryProjects(session.token).then((result) => setSummaries(result.data)).catch(() => undefined); }, [session]);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return projects.filter((project) => {
+    return summaries.filter((project) => {
       const status = project.status.toLowerCase();
       const statusMatch = filter === 'ALL' || (filter === 'ACTIVE' && status === 'active') || (filter === 'COMPLETED' && status === 'completed');
-      const searchMatch = !needle || [project.name, project.projectCode, project.client?.name, project.assignedPm?.username].some((value) => String(value || '').toLowerCase().includes(needle));
+      const searchMatch = !needle || [project.name, project.projectCode, project.client?.name].some((value) => String(value || '').toLowerCase().includes(needle));
       return statusMatch && searchMatch;
     });
-  }, [filter, projects, query]);
+  }, [filter, summaries, query]);
 
   return (
     <Screen scroll={false} contentStyle={styles.screen}>
@@ -30,7 +36,7 @@ export default function ProjectsScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
-        onRefresh={refresh}
+        onRefresh={async () => { await refresh(); if (session) await fetchInventoryProjects(session.token).then((result) => setSummaries(result.data)).catch(() => undefined); }}
         ItemSeparatorComponent={() => <View style={styles.gap} />}
         ListHeaderComponent={<>
           <Title style={styles.title}>Projects</Title>
@@ -42,7 +48,6 @@ export default function ProjectsScreen() {
         </>}
         ListEmptyComponent={<EmptyState title="No projects" message="Change the filter or pull to sync." />}
         renderItem={({ item }) => {
-          const progress = ((stageIndex(item.currentStage) + 1) / PROJECT_STAGES.length) * 100;
           const completed = item.status.toLowerCase() === 'completed';
           return (
             <Pressable onPress={() => router.push({ pathname: '/projects/[id]', params: { id: String(item.id) } })} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
@@ -51,9 +56,10 @@ export default function ProjectsScreen() {
                   <Text numberOfLines={1} style={styles.name}>{item.name}</Text>
                   <Text numberOfLines={1} style={styles.code}>{item.projectCode || `STRATOS-${item.id}`}{item.client?.name ? ` · ${item.client.name}` : ''}</Text>
                 </View>
-                <Pill label={STAGE_LABELS[item.currentStage] || item.currentStage} tone={completed ? 'green' : 'blue'} />
+                <Pill label={item.status.replaceAll('_', ' ')} tone={completed ? 'green' : 'blue'} />
               </View>
-              <View style={styles.progressTrack}><View style={[styles.progressBar, { width: `${Math.min(100, progress)}%` }]} /></View>
+              <View style={styles.inventorySummary}><Text style={styles.inventoryMetric}>{item.reservedItemTypes || 0} reserved types</Text><Text style={styles.inventoryMetric}>{item.releasedItemTypes || 0} released types</Text><Text style={styles.inventoryMetric}>{item.excessItemsPendingReturn || 0} excess pending</Text></View>
+              <Text style={styles.activity}>{item.latestInventoryActivity ? `Latest: ${item.latestInventoryActivity.transactionType.replaceAll('_', ' ')} · ${new Date(item.latestInventoryActivity.createdAt).toLocaleDateString()}` : 'No inventory activity yet'}</Text>
             </Pressable>
           );
         }}
@@ -79,4 +85,7 @@ const styles = StyleSheet.create({
   code: { marginTop: 3, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 },
   progressTrack: { height: 4, marginTop: 12, backgroundColor: BRAND.canvas, borderRadius: 999, overflow: 'hidden' },
   progressBar: { height: '100%', backgroundColor: BRAND.ink, borderRadius: 999 },
+  inventorySummary: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  inventoryMetric: { borderRadius: 7, backgroundColor: BRAND.canvas, paddingHorizontal: 7, paddingVertical: 5, color: BRAND.inkSoft, fontFamily: TYPE.body, fontSize: 9, fontWeight: '600' },
+  activity: { marginTop: 7, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 9 },
 });

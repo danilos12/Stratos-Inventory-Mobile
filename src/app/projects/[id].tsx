@@ -1,196 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-
-import { Body, Card, EmptyState, LoadingScreen, Pill, PrimaryButton, Screen } from '@/components/ui';
-import { BRAND, PROJECT_STAGES, STAGE_LABELS, TYPE, stageIndex } from '@/constants/brand';
-import { advanceProjectStage, fetchProject, updateMaterialConsumption } from '@/lib/api';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { AlertTriangle, ArrowDownToLine, Box, CheckCircle2, Clock3, Package, RotateCcw, ScanLine, Search } from 'lucide-react-native';
+import { PageHeader, RedButton, StatusChip, Surface } from '@/components/inventory-ui';
+import { EmptyState, LoadingScreen, Screen } from '@/components/ui';
+import { BRAND, TYPE } from '@/constants/brand';
+import { absoluteAssetUrl, fetchProjectInventory } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
-import { useSyncedData } from '@/providers/data-provider';
-import type { ProjectDetails, ProjectMaterial } from '@/types/domain';
+import type { ProjectInventoryWorkspace } from '@/types/domain';
 
-export default function ProjectDetailScreen() {
-  const { id: rawId } = useLocalSearchParams<{ id: string }>();
-  const projectId = Number(rawId);
-  const { session } = useAuth();
-  const { projects, loading: catalogLoading, refresh } = useSyncedData();
-  const [project, setProject] = useState<ProjectDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [advancing, setAdvancing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!session || !Number.isInteger(projectId) || catalogLoading) return;
-    setLoading(true); setError(null);
-    const scopedProject = projects.find((row) => row.id === projectId);
-    if (!scopedProject) {
-      setProject(null);
-      setError('This project is not part of the synchronized workspace.');
-      setLoading(false);
-      return;
-    }
-    try { setProject(await fetchProject(session.token, projectId)); }
-    catch (requestError) {
-      setProject({ ...scopedProject, materials: [], photos: [], stageHistory: [], warranty: null });
-      setError(requestError instanceof Error ? requestError.message : 'Project unavailable.');
-    } finally { setLoading(false); }
-  }, [catalogLoading, projectId, projects, session]);
-
-  useEffect(() => {
-    const task = setTimeout(load, 0);
-    return () => clearTimeout(task);
-  }, [load]);
-  if (loading && !project) return <LoadingScreen label="Loading project" />;
-  if (!project) return <Screen><EmptyState error title="Project unavailable" message={error || 'This project could not be found.'} /></Screen>;
-
-  const currentIndex = stageIndex(project.currentStage);
-  const nextStage = PROJECT_STAGES[currentIndex + 1];
-  const progress = ((currentIndex + 1) / PROJECT_STAGES.length) * 100;
-  const accountRole = String(session?.user.systemRole || session?.workspace.effectiveRole || '').toUpperCase();
-  const privileged = ['SUPERADMIN', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'GENERAL_MANAGER'].includes(accountRole);
-  const canAdvance = privileged || ['PROJECT_MANAGER', 'TECHNICIAN'].includes(accountRole);
-  const canEditMaterials = privileged || accountRole === 'PROJECT_MANAGER';
-
-  function confirmAdvance() {
-    if (!nextStage) return;
-    Alert.alert('Advance stage?', `${project!.name} will move to ${STAGE_LABELS[nextStage]}. This cannot be reversed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Advance', onPress: advance },
-    ]);
-  }
-
-  async function advance() {
-    if (!session || !nextStage) return;
-    setAdvancing(true);
-    try { await advanceProjectStage(session.token, projectId, nextStage); await Promise.all([load(), refresh()]); }
-    catch (requestError) { Alert.alert('Stage not updated', requestError instanceof Error ? requestError.message : 'Try again.'); }
-    finally { setAdvancing(false); }
-  }
-
-  async function updateMaterial(materialId: number, amount: number) {
-    if (!session) return;
-    await updateMaterialConsumption(session.token, materialId, amount);
-    await load();
-  }
-
-  return (
-    <Screen refreshing={loading} onRefresh={load}>
-      <View style={styles.header}>
-        <Pill label={project.status} tone={project.status.toLowerCase() === 'completed' ? 'green' : 'red'} />
-        <Text style={styles.title}>{project.name}</Text>
-        <Text style={styles.client}>{project.client?.name || 'Direct project'}{project.projectType ? ` · ${project.projectType}` : ''}</Text>
-        <View style={styles.progressHeader}>
-          <Text style={styles.stage}>{STAGE_LABELS[project.currentStage] || project.currentStage}</Text>
-          <Text style={styles.percent}>{Math.round(progress)}%</Text>
-        </View>
-        <View style={styles.progressTrack}><View style={[styles.progressBar, { width: `${progress}%` }]} /></View>
-      </View>
-
-      {nextStage && canAdvance ? <View style={styles.advance}><PrimaryButton label={`Advance to ${STAGE_LABELS[nextStage]}`} loading={advancing} onPress={confirmAdvance} /></View> : null}
-      {error ? <Body style={styles.cacheNote}>Showing cached summary.</Body> : null}
-
-      <Card style={styles.factsCard}>
-        <Fact label="Manager" value={project.assignedPm?.username || 'Unassigned'} />
-        <Fact label="Crew" value={`${project.technicians.length || 'No'} assigned`} />
-        <Fact label="Target" value={project.targetCompletion ? new Date(project.targetCompletion).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set'} />
-        <Fact label="Materials" value={`${project.materials.length || project.counts.materials || 0} lines`} last />
-      </Card>
-
-      <Text style={styles.sectionTitle}>Materials</Text>
-      <View style={styles.materialList}>
-        {project.materials.length ? project.materials.map((material) => <MaterialRow key={material.id} material={material} editable={canEditMaterials} onSave={updateMaterial} />) : <Body style={styles.emptySection}>No material lines.</Body>}
-      </View>
-
-      <Text style={styles.sectionTitle}>Stage history</Text>
-      <Card style={styles.historyCard}>
-        {project.stageHistory.length ? project.stageHistory.slice(0, 12).map((entry, index) => (
-          <View key={entry.id} style={[styles.historyRow, index < Math.min(project.stageHistory.length, 12) - 1 && styles.historyBorder]}>
-            <View style={styles.historyMain}>
-              <Text style={styles.historyTitle}>{STAGE_LABELS[entry.toStage] || entry.toStage}</Text>
-              <Text style={styles.historyMeta}>{entry.user?.username || 'Team'} · {new Date(entry.changedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
-              {entry.notes ? <Text style={styles.historyNote}>{entry.notes}</Text> : null}
-            </View>
-          </View>
-        )) : <Body style={styles.historyEmpty}>No stage changes.</Body>}
-      </Card>
-    </Screen>
-  );
+type Tab = 'Overview' | 'Items' | 'Requests' | 'Excess and Returns' | 'History';
+const tabs: Tab[] = ['Overview', 'Items', 'Requests', 'Excess and Returns', 'History'];
+export default function ProjectInventoryScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>(); const { session } = useAuth(); const [data, setData] = useState<ProjectInventoryWorkspace | null>(null); const [error, setError] = useState(''); const [tab, setTab] = useState<Tab>('Overview'); const [query, setQuery] = useState(''); const [scanCode, setScanCode] = useState('');
+  const load = useCallback(async () => { if (!session || !id) return; setError(''); try { setData(await fetchProjectInventory(session.token, Number(id))); } catch (e) { setError(e instanceof Error ? e.message : 'Project inventory unavailable'); } }, [id, session]); useFocusEffect(useCallback(() => { void load(); }, [load]));
+  const items = useMemo(() => { const q = query.toLowerCase().trim(); return (data?.items || []).filter((row) => !q || [row.item.name, row.item.sku, row.item.barcode, row.container?.containerId].some((value) => String(value || '').toLowerCase().includes(q))); }, [data, query]);
+  if (!data && !error) return <LoadingScreen label="Opening project inventory" />; if (!data) return <Screen><PageHeader title="Project" /><EmptyState error title="Project unavailable" message={error} /></Screen>;
+  function checkProjectCode() { const q = scanCode.trim().toLowerCase(); const found = data!.items.find((row) => [row.item.barcode, row.item.sku].some((value) => String(value || '').toLowerCase() === q)); if (!found) Alert.alert('Not found', 'This item is not recorded under this project.'); else { setQuery(found.item.barcode || found.item.sku); setTab('Items'); Alert.alert(found.item.name, `Remaining: ${found.remainingQty} ${found.item.unit}`); } }
+  return <Screen><PageHeader title="Project Inventory" scan /><Surface style={styles.project}><Text style={styles.code}>{data.project.projectCode || `PROJECT-${data.project.id}`}</Text><Text style={styles.title}>{data.project.name}</Text><Text style={styles.client}>{data.project.client?.name || 'Client not specified'}</Text><StatusChip label={data.project.status} accent="green" compact /></Surface><View style={styles.tabs}>{tabs.map((value) => <Pressable key={value} onPress={() => setTab(value)} style={[styles.tab, tab === value && styles.tabActive]}><Text style={[styles.tabText, tab === value && styles.tabTextActive]}>{value}</Text></Pressable>)}</View>
+    {tab === 'Overview' ? <><Text style={styles.heading}>Project quantities</Text><View style={styles.stats}><Stat icon={<Box size={21} color={BRAND.violet} />} label="Reserved in Stock Room" value={data.summary.reservedInStockRoom} soft={BRAND.violetSoft} /><Stat icon={<ArrowDownToLine size={21} color={BRAND.red} />} label="Released to Project" value={data.summary.releasedToProject} soft={BRAND.redSoft} /><Stat icon={<CheckCircle2 size={21} color={BRAND.green} />} label="Used or Consumed" value={data.summary.usedOrConsumed} soft={BRAND.greenSoft} /><Stat icon={<Clock3 size={21} color={BRAND.amber} />} label="Excess Pending Return" value={data.summary.excessPendingReturn} soft={BRAND.amberSoft} /><Stat icon={<RotateCcw size={21} color={BRAND.blue} />} label="Returned to Stock Room" value={data.summary.returnedToStockRoom} soft={BRAND.blueSoft} /><Stat icon={<AlertTriangle size={21} color={BRAND.red} />} label="Defective or For Repair" value={data.summary.defectiveOrRepair} soft={BRAND.redSoft} /></View><Surface style={styles.notice}><Text style={styles.noticeText}>Reserved quantities are still physically inside the stock room. Only completed Stock Out quantities appear as released.</Text></Surface><Text style={styles.heading}>Incoming releases</Text>{data.receipts.filter((row) => !row.receivedAt).map((receipt) => <Surface key={receipt.id} onPress={() => router.push({ pathname: '/projects/[id]/receipt/[receiptId]', params: { id: String(data.project.id), receiptId: String(receipt.id) } } as never)} style={styles.row}><View style={styles.main}><Text style={styles.name}>{receipt.InventoryTransaction?.transactionNo || `Release ${receipt.transactionId}`}</Text><Text style={styles.meta}>{receipt.status.replaceAll('_', ' ')}</Text></View><StatusChip label="Confirm Receipt" accent="red" compact /></Surface>)}</> : null}
+    {tab === 'Items' ? <><View style={styles.search}><Search size={18} color={BRAND.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Search item, barcode or container" placeholderTextColor={BRAND.muted} style={styles.searchInput} /></View><View style={styles.scanRow}><TextInput value={scanCode} onChangeText={setScanCode} placeholder="Scan or enter barcode within this project" placeholderTextColor={BRAND.muted} style={styles.scanInput} /><Pressable onPress={checkProjectCode} style={styles.scanButton}><ScanLine size={22} color={BRAND.white} /></Pressable></View><Text style={styles.count}>{items.length} project item types</Text>{items.map((row) => <Surface key={row.id} style={styles.item}><View style={styles.image}>{row.item.imageUrl ? <Image source={{ uri: absoluteAssetUrl(row.item.imageUrl) || undefined }} style={styles.imageActual} /> : <Package size={22} color={BRAND.muted} />}</View><View style={styles.main}><Text style={styles.name}>{row.item.name}</Text><Text style={styles.meta}>{row.item.barcode || row.item.sku}{row.container ? ` · ${row.container.containerId}` : ''}</Text><View style={styles.metrics}><Metric label="Reserved" value={row.reservedQty} /><Metric label="Released" value={row.releasedQty} /><Metric label="Received" value={row.receivedQty} /><Metric label="Used" value={row.usedQty} /><Metric label="Remaining" value={row.remainingQty} /><Metric label="Excess" value={row.excessPendingQty} /><Metric label="Returned" value={row.returnedQty} /></View><StatusChip label={row.condition.replaceAll('_', ' ')} accent={row.condition === 'GOOD' ? 'green' : 'amber'} compact /></View></Surface>)}<RedButton onPress={() => router.push({ pathname: '/projects/[id]/declare-excess', params: { id: String(data.project.id) } } as never)}>Declare Excess</RedButton></> : null}
+    {tab === 'Requests' ? <><Text style={styles.heading}>Approved reservations</Text>{data.items.filter((row) => row.reservedQty > 0).map((row) => <Surface key={row.id} style={styles.row}><View style={styles.main}><Text style={styles.name}>{row.item.name}</Text><Text style={styles.meta}>{row.item.barcode || row.item.sku}</Text></View><Text style={styles.quantity}>{row.reservedQty} reserved</Text></Surface>)}{!data.items.some((row) => row.reservedQty > 0) ? <EmptyState title="No open reservations" message="Approved, unreleased quantities will appear here." /> : null}</> : null}
+    {tab === 'Excess and Returns' ? <><RedButton onPress={() => router.push({ pathname: '/projects/[id]/declare-excess', params: { id: String(data.project.id) } } as never)}>Declare Excess</RedButton><Text style={styles.heading}>Declarations</Text>{data.excessDeclarations.map((row) => <Surface key={row.id} style={styles.row}><View style={styles.main}><Text style={styles.name}>{row.declarationNo}</Text><Text style={styles.meta}>{new Date(row.declaredAt).toLocaleString()}</Text></View><StatusChip label={row.status.replaceAll('_', ' ')} accent={row.status === 'DECLARED' ? 'amber' : 'green'} compact /></Surface>)}{!data.excessDeclarations.length ? <EmptyState title="No excess declarations" message="Unused remaining items can be declared here." /> : null}</> : null}
+    {tab === 'History' ? <>{data.history.map((row) => <Surface key={row.id} style={styles.row}><View style={styles.main}><Text style={styles.name}>{row.transactionNo}</Text><Text style={styles.meta}>{row.transactionType.replaceAll('_', ' ')} · {new Date(row.createdAt).toLocaleString()}</Text></View><StatusChip label={row.status} accent="green" compact /></Surface>)}{!data.history.length ? <EmptyState title="No movement history" message="Project inventory movements will appear here." /> : null}</> : null}</Screen>;
 }
-
-function Fact({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
-  return (
-    <View style={[styles.fact, !last && styles.factBorder]}>
-      <Text style={styles.factLabel}>{label}</Text>
-      <Text numberOfLines={1} style={styles.factValue}>{value}</Text>
-    </View>
-  );
-}
-
-function MaterialRow({ material, editable, onSave }: { material: ProjectMaterial; editable: boolean; onSave: (id: number, amount: number) => Promise<void> }) {
-  const [value, setValue] = useState(String(material.consumedQty));
-  const [saving, setSaving] = useState(false);
-  const variance = Number(value || 0) - Number(material.quotedQty || 0);
-  async function save() {
-    const amount = Number(value);
-    if (!Number.isFinite(amount) || amount < 0) { Alert.alert('Invalid quantity', 'Consumption must be zero or more.'); return; }
-    setSaving(true);
-    try { await onSave(material.id, amount); }
-    catch (error) { Alert.alert('Consumption not updated', error instanceof Error ? error.message : 'Try again.'); }
-    finally { setSaving(false); }
-  }
-  return (
-    <Card style={styles.material}>
-      <View style={styles.materialTop}>
-        <View style={styles.materialMain}>
-          <Text numberOfLines={1} style={styles.materialName}>{material.item?.name || `Item #${material.inventoryItemId}`}</Text>
-          <Text style={styles.materialSku}>Quoted {material.quotedQty} {material.unit || material.item?.unit || 'units'}</Text>
-        </View>
-        <Pill label={`${variance > 0 ? '+' : ''}${variance}`} tone={variance > 0 ? 'red' : variance < 0 ? 'green' : 'neutral'} />
-      </View>
-      <View style={styles.consumeRow}>
-        <TextInput value={value} onChangeText={setValue} editable={editable} keyboardType="decimal-pad" style={[styles.consumeInput, !editable && styles.consumeReadOnly]} />
-        {editable ? <Pressable disabled={saving} onPress={save} style={[styles.save, saving && styles.saveDisabled]}><Text style={styles.saveText}>{saving ? '…' : 'Save'}</Text></Pressable> : null}
-      </View>
-    </Card>
-  );
-}
-
-const styles = StyleSheet.create({
-  header: { marginBottom: 4 },
-  title: { marginTop: 8, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 24, lineHeight: 28, fontWeight: '600', letterSpacing: -0.3 },
-  client: { marginTop: 4, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 13 },
-  progressHeader: { marginTop: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  stage: { color: BRAND.ink, fontFamily: TYPE.body, fontSize: 13, fontWeight: '600' },
-  percent: { color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 },
-  progressTrack: { marginTop: 8, height: 4, borderRadius: 999, backgroundColor: BRAND.canvas, overflow: 'hidden' },
-  progressBar: { height: '100%', borderRadius: 999, backgroundColor: BRAND.ink },
-  advance: { marginTop: 12 },
-  cacheNote: { marginTop: 8, fontSize: 12 },
-  factsCard: { marginTop: 16, paddingHorizontal: 15 },
-  fact: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  factBorder: { borderBottomWidth: 1, borderBottomColor: BRAND.line },
-  factLabel: { color: BRAND.muted, fontFamily: TYPE.body, fontSize: 13 },
-  factValue: { flex: 1, textAlign: 'right', color: BRAND.ink, fontFamily: TYPE.body, fontSize: 13, fontWeight: '500' },
-  sectionTitle: { marginTop: 22, marginBottom: 10, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 17, fontWeight: '600' },
-  materialList: { gap: 8 },
-  material: { padding: 13 },
-  materialTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  materialMain: { flex: 1, minWidth: 0 },
-  materialName: { color: BRAND.ink, fontFamily: TYPE.body, fontSize: 13, fontWeight: '600' },
-  materialSku: { marginTop: 2, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 },
-  consumeRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  consumeInput: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: BRAND.line, backgroundColor: BRAND.canvas, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 13, paddingHorizontal: 12 },
-  consumeReadOnly: { color: BRAND.muted },
-  save: { height: 40, minWidth: 64, borderRadius: 10, backgroundColor: BRAND.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  saveDisabled: { opacity: 0.5 },
-  saveText: { color: BRAND.white, fontFamily: TYPE.body, fontSize: 13, fontWeight: '600' },
-  emptySection: { paddingVertical: 14, textAlign: 'center' },
-  historyCard: { paddingHorizontal: 15 },
-  historyRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center' },
-  historyBorder: { borderBottomWidth: 1, borderBottomColor: BRAND.line },
-  historyMain: { flex: 1 },
-  historyTitle: { color: BRAND.ink, fontFamily: TYPE.body, fontSize: 13, fontWeight: '600' },
-  historyMeta: { marginTop: 2, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 },
-  historyNote: { marginTop: 3, color: BRAND.inkSoft, fontFamily: TYPE.body, fontSize: 12 },
-  historyEmpty: { padding: 20, textAlign: 'center' },
-});
+function Stat({ icon, label, value, soft }: { icon: ReactNode; label: string; value: number; soft: string }) { return <Surface style={styles.stat}><View style={[styles.statIcon, { backgroundColor: soft }]}>{icon}</View><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></Surface>; } function Metric({ label, value }: { label: string; value: number }) { return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>; }
+const styles = StyleSheet.create({ project: { padding: 16 }, code: { color: BRAND.red, fontFamily: TYPE.body, fontSize: 10, fontWeight: '800', letterSpacing: 1 }, title: { marginTop: 4, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 21, fontWeight: '800' }, client: { marginVertical: 5, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 12 }, tabs: { marginVertical: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, tab: { borderRadius: 999, backgroundColor: BRAND.canvas, paddingHorizontal: 11, paddingVertical: 8 }, tabActive: { backgroundColor: BRAND.ink }, tabText: { color: BRAND.inkSoft, fontFamily: TYPE.body, fontSize: 11, fontWeight: '700' }, tabTextActive: { color: BRAND.white }, heading: { marginTop: 18, marginBottom: 9, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 18, fontWeight: '800' }, stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, stat: { width: '48%', minHeight: 137, padding: 13 }, statIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, statValue: { marginTop: 10, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 23, fontWeight: '800' }, statLabel: { marginTop: 3, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 10, lineHeight: 14 }, notice: { marginTop: 11, padding: 13, backgroundColor: BRAND.violetSoft }, noticeText: { color: BRAND.violet, fontFamily: TYPE.body, fontSize: 11, lineHeight: 16, fontWeight: '700' }, row: { minHeight: 65, marginBottom: 7, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }, main: { flex: 1, minWidth: 0 }, name: { color: BRAND.ink, fontFamily: TYPE.body, fontSize: 14, fontWeight: '700' }, meta: { marginTop: 3, color: BRAND.muted, fontFamily: TYPE.body, fontSize: 10 }, search: { minHeight: 48, borderRadius: 12, backgroundColor: BRAND.canvas, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }, searchInput: { flex: 1, color: BRAND.ink }, scanRow: { marginTop: 8, flexDirection: 'row', gap: 7 }, scanInput: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: BRAND.line, paddingHorizontal: 12, color: BRAND.ink }, scanButton: { width: 50, borderRadius: 12, backgroundColor: BRAND.red, alignItems: 'center', justifyContent: 'center' }, count: { marginVertical: 10, color: BRAND.violet, fontFamily: TYPE.body, fontSize: 11, fontWeight: '800' }, item: { marginBottom: 8, padding: 13, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, image: { width: 50, height: 50, borderRadius: 12, backgroundColor: BRAND.canvas, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }, imageActual: { width: '100%', height: '100%' }, metrics: { marginVertical: 9, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, metric: { minWidth: 53, borderRadius: 8, backgroundColor: BRAND.canvas, padding: 6 }, metricValue: { color: BRAND.ink, fontFamily: TYPE.body, fontSize: 12, fontWeight: '800' }, metricLabel: { color: BRAND.muted, fontFamily: TYPE.body, fontSize: 8 }, quantity: { color: BRAND.red, fontFamily: TYPE.body, fontSize: 12, fontWeight: '800' } });

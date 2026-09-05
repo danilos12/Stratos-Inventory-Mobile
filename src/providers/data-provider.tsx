@@ -1,7 +1,8 @@
 import NetInfo from '@react-native-community/netinfo';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { ApiError, fetchInventory, fetchMobileWorkspace, fetchProjects, selectDefaultWarehouse } from '@/lib/api';
+import { ApiError, fetchInventory, fetchInventoryProjects, fetchMobileWorkspace, fetchProjects, selectDefaultWarehouse } from '@/lib/api';
+import { canManageStockRoom } from '@/lib/inventory-rules';
 import { readDataCache, writeDataCache } from '@/lib/storage';
 import { useAuth } from '@/providers/auth-provider';
 import type { InventoryItem, MobileInventoryWorkspace, OperationalTask, StratosProject, SyncedData } from '@/types/domain';
@@ -24,7 +25,7 @@ const DataContext = createContext<DataValue | null>(null);
 
 const EMPTY_WORKSPACE: MobileInventoryWorkspace = {
   warehouses: [], selectedWarehouseId: null,
-  summary: { onHand: 0, reserved: 0, lowStock: 0, pendingTasks: 0, unreadNotifications: 0 },
+  summary: { onHand: 0, available: 0, reserved: 0, releasedToProjects: 0, excessPendingReturn: 0, lowStock: 0, pendingTasks: 0, unreadNotifications: 0 },
   tasks: [], history: [],
 };
 
@@ -40,7 +41,7 @@ function fallbackWorkspace(inventory: InventoryItem[], projects: StratosProject[
   return {
     warehouses: [{ id: warehouseId, code: 'MAIN', name: inventory.find((item) => item.location)?.location || 'Main Stock Room', isDefault: true }],
     selectedWarehouseId: warehouseId,
-    summary: { onHand, reserved, lowStock: lowItems.length, pendingTasks: tasks.length, unreadNotifications: 0 },
+    summary: { onHand, available: Math.max(0, onHand - reserved), reserved, releasedToProjects: 0, excessPendingReturn: 0, lowStock: lowItems.length, pendingTasks: tasks.length, unreadNotifications: 0 },
     tasks,
     history: [],
   };
@@ -75,15 +76,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setRefreshing(true);
     setError(null);
     try {
+      const managesStockRoom = canManageStockRoom(session.workspace.effectiveRole || session.user.systemRole);
       const [items, projectRows] = await Promise.all([
-        fetchInventory(session.token),
-        fetchProjects(session.token),
+        managesStockRoom ? fetchInventory(session.token) : Promise.resolve([]),
+        managesStockRoom ? fetchProjects(session.token) : fetchInventoryProjects(session.token).then(({ data }) => data.map((project) => ({ ...project, currentStage: project.status, technicians: [], counts: { photos: 0, materials: 0, stageHistory: 0 } }))),
       ]);
       let nextWorkspace: MobileInventoryWorkspace;
       try {
         nextWorkspace = await fetchMobileWorkspace(session.token, workspace.selectedWarehouseId);
       } catch (workspaceError) {
-        if (!(workspaceError instanceof ApiError) || workspaceError.status !== 404) throw workspaceError;
+        if (!(workspaceError instanceof ApiError) || ![403, 404].includes(workspaceError.status)) throw workspaceError;
         nextWorkspace = fallbackWorkspace(items, projectRows);
       }
       const syncedAt = new Date().toISOString();

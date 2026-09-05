@@ -6,12 +6,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Check, ClipboardList, ScanLine, Signature as SignatureIcon, Upload, UserRound } from 'lucide-react-native';
 
 import { IconBadge, OutlineButton, PageHeader, RedButton, StatusChip, Surface, WorkflowBottomBar } from '@/components/inventory-ui';
+import { AdditionalFormFields, toAdditionalFieldSubmissions, type AdditionalFormField } from '@/components/additional-form-fields';
 import { SignaturePad } from '@/components/signature-pad';
 import { EmptyState, LoadingScreen, Screen } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
 import { absoluteAssetUrl, completeReleaseWorkOrder, fetchReleaseWorkOrder, saveReleaseScan } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { useSyncedData } from '@/providers/data-provider';
+import { useScanFeedback } from '@/lib/scan-feedback';
 import type { ReleaseWorkOrder } from '@/types/domain';
 
 type Point = [number, number];
@@ -19,8 +21,10 @@ type Point = [number, number];
 export default function ReleaseWorkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); const workId = Number(id);
   const { session } = useAuth(); const { refresh } = useSyncedData();
+  const { playScanError, playScanSuccess } = useScanFeedback();
   const [work, setWork] = useState<ReleaseWorkOrder | null>(null); const [loading, setLoading] = useState(true); const [submitting, setSubmitting] = useState(false);
   const [code, setCode] = useState(''); const [signature, setSignature] = useState<Point[][]>([]); const [acknowledged, setAcknowledged] = useState(false);
+  const [additionalFields, setAdditionalFields] = useState<AdditionalFormField[]>([]);
 
   const load = useCallback(async () => { if (!session || !workId) return; setLoading(true); try { setWork(await fetchReleaseWorkOrder(session.token, workId)); } catch (error) { Alert.alert('Release unavailable', error instanceof Error ? error.message : 'Unable to load release.'); } finally { setLoading(false); } }, [session, workId]);
   useEffect(() => { const task = setTimeout(load, 0); return () => clearTimeout(task); }, [load]);
@@ -29,7 +33,7 @@ export default function ReleaseWorkScreen() {
 
   async function scanLine(lineId: number) {
     if (!session || !work || !code.trim()) { Alert.alert('Enter or scan a code', 'Use the item barcode, SKU, serial, or asset tag.'); return; }
-    try { setWork(await saveReleaseScan(session.token, work.id, { lineId, code: code.trim() })); setCode(''); } catch (error) { Alert.alert('Item not accepted', error instanceof Error ? error.message : 'This code does not match the pick line.'); }
+    try { setWork(await saveReleaseScan(session.token, work.id, { lineId, code: code.trim() })); setCode(''); playScanSuccess(); } catch (error) { playScanError(); Alert.alert('Item not accepted', error instanceof Error ? error.message : 'This code does not match the pick line.'); }
   }
 
   async function submit() {
@@ -38,7 +42,7 @@ export default function ReleaseWorkScreen() {
     if (!signature.length) { Alert.alert('Recipient signature required', 'Capture the recipient’s signature before completing release.'); return; }
     if (!acknowledged) { Alert.alert('Condition check required', 'Confirm the items were checked and are in good condition.'); return; }
     setSubmitting(true);
-    try { await completeReleaseWorkOrder(session.token, work.id, { signatureStrokes: signature, conditionAcknowledged: true, idempotencyKey: Crypto.randomUUID() }); await refresh(); Alert.alert('Release completed', 'The inventory movement was posted successfully.', [{ text: 'Done', onPress: () => router.replace('/history' as never) }]); }
+    try { await completeReleaseWorkOrder(session.token, work.id, { signatureStrokes: signature, conditionAcknowledged: true, idempotencyKey: Crypto.randomUUID(), ...(additionalFields.length ? { additionalFields: toAdditionalFieldSubmissions(additionalFields) } : {}) }); await refresh(); Alert.alert('Release completed', 'The inventory movement was posted successfully.', [{ text: 'Done', onPress: () => router.replace('/history' as never) }]); }
     catch (error) { Alert.alert('Release not completed', error instanceof Error ? error.message : 'Please retry.'); } finally { setSubmitting(false); }
   }
 
@@ -56,6 +60,7 @@ export default function ReleaseWorkScreen() {
 
       <Surface style={styles.recipient}><IconBadge accent="violet" size={48}><UserRound size={25} color={BRAND.violet} /></IconBadge><View style={styles.recipientMain}><Text style={styles.recipientLabel}>Received By</Text><Text style={styles.recipientName}>{work.recipientName || 'Assigned recipient'}</Text><Text style={styles.recipientRole}>{work.recipientRole || 'Project representative'}</Text></View></Surface>
       <Surface style={styles.signature}><View style={styles.signatureTitle}><SignatureIcon size={21} color={BRAND.violet} /><Text style={styles.signatureText}>Capture Signature</Text></View><SignaturePad value={signature} onChange={setSignature} /></Surface>
+      <AdditionalFormFields fields={additionalFields} onChange={setAdditionalFields} />
       <Pressable onPress={() => setAcknowledged((value) => !value)} style={styles.checkRow}><View style={[styles.checkbox, acknowledged && styles.checkboxActive]}>{acknowledged ? <Check size={18} color={BRAND.white} /> : null}</View><Text style={styles.checkLabel}>Items checked and in good condition</Text></Pressable>
       <RedButton disabled={submitting || !complete} icon={<Upload size={24} color={BRAND.white} />} onPress={submit}>{submitting ? 'Completing…' : 'Complete Release'}</RedButton>
     </Screen>

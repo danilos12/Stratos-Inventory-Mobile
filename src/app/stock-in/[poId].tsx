@@ -6,6 +6,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Box, CalendarDays, ClipboardList, Hash, MapPin, Shield, Truck, Upload } from 'lucide-react-native';
 
 import { PageHeader, RedButton, Stepper, StatusChip, Surface, WorkflowBottomBar } from '@/components/inventory-ui';
+import { AdditionalFormFields, mergeAdditionalFieldsIntoNotes, toAdditionalFieldSubmissions, type AdditionalFormField } from '@/components/additional-form-fields';
 import { PhotoEvidence, type LocalPhoto } from '@/components/photo-evidence';
 import { EmptyState, LoadingScreen, Screen } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
@@ -20,6 +21,7 @@ export default function StockInScreen() {
   const { session } = useAuth(); const { selectedWarehouseId, refresh } = useSyncedData();
   const [order, setOrder] = useState<PurchaseOrderWork | null>(null); const [loading, setLoading] = useState(true); const [submitting, setSubmitting] = useState(false);
   const [quantity, setQuantity] = useState(''); const [batch, setBatch] = useState(''); const [location, setLocation] = useState(''); const [notes, setNotes] = useState(''); const [photos, setPhotos] = useState<LocalPhoto[]>([]);
+  const [additionalFields, setAdditionalFields] = useState<AdditionalFormField[]>([]);
 
   const load = useCallback(async () => { if (!session || !poId) return; setLoading(true); try { const result = await fetchPurchaseOrderWork(session.token, poId); setOrder(result); const resultLines = result.items || result.PurchaseOrderItem || []; const firstLine = resultLines.find((row) => row.itemId === preferredItemId) || resultLines.find((row) => Number(row.quantity) > Number(row.receivedQty)) || resultLines[0]; if (firstLine) setQuantity(String(Math.max(0, Number(firstLine.quantity) - Number(firstLine.receivedQty || 0)))); } catch (error) { Alert.alert('Purchase order unavailable', error instanceof Error ? error.message : 'Unable to load this receipt.'); } finally { setLoading(false); } }, [poId, preferredItemId, session]);
   useEffect(() => { const task = setTimeout(load, 0); return () => clearTimeout(task); }, [load]);
@@ -35,7 +37,7 @@ export default function StockInScreen() {
     setSubmitting(true);
     try {
       const evidence = await uploadWorkflowPhoto(session.token, { ...photos[0], kind: 'DELIVERY_RECEIPT' });
-      await receivePurchaseOrder(session.token, order.id, { warehouseId: selectedWarehouseId, items: [{ poItemId: line.id, receivedQty: qty }], drNumber: batch.trim() || null, remarks: [location.trim(), notes.trim()].filter(Boolean).join(' · ') || null, receivedDate: new Date().toISOString(), idempotencyKey: Crypto.randomUUID(), evidenceId: evidence.id });
+      await receivePurchaseOrder(session.token, order.id, { warehouseId: selectedWarehouseId, items: [{ poItemId: line.id, receivedQty: qty }], drNumber: batch.trim() || null, remarks: mergeAdditionalFieldsIntoNotes([location.trim(), notes.trim()].filter(Boolean).join(' · '), additionalFields), receivedDate: new Date().toISOString(), idempotencyKey: Crypto.randomUUID(), evidenceId: evidence.id, ...(additionalFields.length ? { additionalFields: toAdditionalFieldSubmissions(additionalFields) } : {}) });
       await refresh(); Alert.alert('Stock received', `${qty} ${line.unit || 'units'} were posted to inventory.`, [{ text: 'Done', onPress: () => router.replace('/history' as never) }]);
     } catch (error) { Alert.alert('Stock not received', error instanceof Error ? error.message : 'Please retry.'); } finally { setSubmitting(false); }
   }
@@ -60,6 +62,7 @@ export default function StockInScreen() {
 
       <Surface style={styles.photoCard}><PhotoEvidence label="Delivery receipt photo" hint="Required proof for this stock receipt" photos={photos} onChange={setPhotos} /></Surface>
       <TextInput multiline textAlignVertical="top" value={notes} onChangeText={setNotes} placeholder="Receiving notes (optional)" placeholderTextColor={BRAND.muted} style={styles.notes} />
+      <AdditionalFormFields fields={additionalFields} onChange={setAdditionalFields} />
       <RedButton disabled={submitting} icon={<Upload size={23} color={BRAND.white} />} onPress={submit}>{submitting ? 'Posting receipt…' : 'Continue to Confirm'}</RedButton>
     </Screen>
   );

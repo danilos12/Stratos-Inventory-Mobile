@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Check } from 'lucide-react-native';
 
 import { Body, Card, EmptyState, PrimaryButton, Screen, Title } from '@/components/ui';
+import { AdditionalFormFields, mergeAdditionalFieldsIntoNotes, toAdditionalFieldSubmissions, type AdditionalFormField } from '@/components/additional-form-fields';
 import { BRAND, TYPE } from '@/constants/brand';
 import { requestProjectRelease } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
@@ -19,6 +20,7 @@ export default function ReleaseRequestScreen() {
   const [projectId, setProjectId] = useState<number | null>(activeProjects[0]?.id || null);
   const [qty, setQty] = useState('1');
   const [note, setNote] = useState('');
+  const [additionalFields, setAdditionalFields] = useState<AdditionalFormField[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   if (!item) return <Screen><EmptyState error title="Item not in catalog" message="Sync inventory before requesting stock-out." /></Screen>;
@@ -30,7 +32,7 @@ export default function ReleaseRequestScreen() {
     if (!session) return;
     setSubmitting(true);
     try {
-      const response = await requestProjectRelease(session.token, itemId, { projectId, qty: amount, note });
+      const response = await requestProjectRelease(session.token, itemId, { projectId, qty: amount, note: mergeAdditionalFieldsIntoNotes(note, additionalFields) || undefined, ...(additionalFields.length ? { additionalFields: toAdditionalFieldSubmissions(additionalFields) } : {}) });
       await refresh();
       Alert.alert('Request submitted', response.message, [{ text: 'Done', onPress: () => router.back() }]);
     } catch (error) { Alert.alert('Request not submitted', error instanceof Error ? error.message : 'Try again.'); }
@@ -68,6 +70,7 @@ export default function ReleaseRequestScreen() {
       <TextInput value={qty} onChangeText={setQty} keyboardType="decimal-pad" style={styles.input} placeholder="1" placeholderTextColor={BRAND.muted} />
       <Text style={styles.label}>Note <Text style={styles.optional}>(optional)</Text></Text>
       <TextInput value={note} onChangeText={setNote} style={[styles.input, styles.note]} placeholder="Purpose or area" placeholderTextColor={BRAND.muted} multiline textAlignVertical="top" />
+      <AdditionalFormFields fields={additionalFields} onChange={setAdditionalFields} />
       <View style={styles.submit}><PrimaryButton label="Submit" loading={submitting} disabled={!activeProjects.length} onPress={submit} /></View>
     </Screen>
   );

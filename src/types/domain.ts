@@ -108,6 +108,9 @@ export interface OperationalTask {
 export interface InventoryHomeSummary {
   onHand: number;
   reserved: number;
+  available?: number;
+  releasedToProjects?: number;
+  excessPendingReturn?: number;
   lowStock: number;
   pendingTasks: number;
   unreadNotifications: number;
@@ -214,7 +217,7 @@ export interface AppNotification {
 }
 
 export interface ScanResolution {
-  type: 'ITEM' | 'RELEASE' | 'RETURN' | 'COUNT' | 'PURCHASE_ORDER' | 'LOCATION';
+  type: 'ITEM' | 'RELEASE' | 'RETURN' | 'COUNT' | 'PURCHASE_ORDER' | 'LOCATION' | 'CONTAINER' | 'SHELF';
   id: number;
   code: string;
   item?: InventoryItem | null;
@@ -375,4 +378,169 @@ export interface SyncedData {
   projects: StratosProject[];
   workspace?: MobileInventoryWorkspace;
   syncedAt: string;
+}
+
+export type StorageMethod = 'SHELF_ONLY' | 'FIXED_BIN' | 'MOVABLE_PROJECT';
+export type ContainerType = 'FIXED_BIN' | 'MOVABLE_PROJECT';
+
+export interface StockRoomShelf {
+  id: number;
+  stockRoomId: number;
+  rackId: number;
+  code: string;
+  name: string;
+  barcode: string;
+  storageMethod: StorageMethod;
+  containers: Pick<StorageContainer, 'id' | 'containerId' | 'name' | 'type' | 'status' | 'projectId'>[];
+}
+
+export interface StockRoomRack {
+  id: number;
+  stockRoomId: number;
+  code: string;
+  name: string;
+  barcode: string;
+  status: string;
+  shelves: StockRoomShelf[];
+}
+
+export interface StockRoomMap {
+  stockRoom: { id: number; code: string; name: string };
+  racks: StockRoomRack[];
+}
+
+export interface StockRoomShelfDetails extends StockRoomShelf {
+  rack: Omit<StockRoomRack, 'shelves'>;
+  shelfOnlyItems: { item: Pick<InventoryItem, 'id' | 'name' | 'sku' | 'barcode' | 'unit' | 'imageUrl' | 'conditionStatus'>; qty: number }[];
+}
+
+export interface StorageContainerItem {
+  id: number;
+  inventoryItemId: number;
+  qty: number;
+  reservedQty: number;
+  condition: string;
+  warrantyEndsAt?: string | null;
+  item: Pick<InventoryItem, 'id' | 'name' | 'sku' | 'barcode' | 'unit' | 'imageUrl' | 'warrantyPeriod'>;
+  batch?: { id: number; batchNo: string; expiryDate?: string | null } | null;
+}
+
+export interface StorageContainer {
+  id: number;
+  stockRoomId: number;
+  shelfId?: number | null;
+  containerId: string;
+  name: string;
+  type: ContainerType;
+  status: string;
+  projectId?: number | null;
+  project?: { id: number; name: string; projectCode?: string | null } | null;
+  shelf?: Omit<StockRoomShelf, 'containers'> | null;
+  rack?: Omit<StockRoomRack, 'shelves'> | null;
+  itemTypes: number;
+  totalUnits: number;
+  items: StorageContainerItem[];
+}
+
+export interface InventoryCartLine {
+  clientLineId: string;
+  itemId: number;
+  item?: InventoryItem;
+  qty: number;
+  unit?: string | null;
+  batchId?: number | null;
+  batchNo?: string | null;
+  serialNumber?: string | null;
+  warrantyEndsAt?: string | null;
+  condition: string;
+  shelfId?: number | null;
+  containerId?: number | null;
+  notes?: string | null;
+  evidenceIds?: number[];
+}
+
+export interface InventoryTransactionRecord {
+  id: number;
+  transactionNo: string;
+  transactionType: string;
+  purpose: string;
+  projectId?: number | null;
+  status: string;
+  syncStatus: string;
+  createdAt: string;
+  completedAt?: string | null;
+  InventoryTransactionLine: { id: number; inventoryItemId: number; qty: number; unit?: string | null; batchId?: number | null; serialNumber?: string | null; condition: string; sourceShelfId?: number | null; sourceContainerId?: number | null; destinationShelfId?: number | null; destinationContainerId?: number | null; notes?: string | null }[];
+}
+
+export interface ProjectInventoryItem {
+  id: number;
+  inventoryItemId: number;
+  containerId?: number | null;
+  reservedQty: number;
+  releasedQty: number;
+  receivedQty: number;
+  usedQty: number;
+  remainingQty: number;
+  excessPendingQty: number;
+  returnedQty: number;
+  defectiveQty: number;
+  condition: string;
+  item: Pick<InventoryItem, 'id' | 'name' | 'sku' | 'barcode' | 'imageUrl' | 'unit' | 'conditionStatus'>;
+  container?: Pick<StorageContainer, 'id' | 'containerId' | 'name'> | null;
+}
+
+export interface ProjectInventoryWorkspace {
+  project: { id: number; name: string; projectCode?: string | null; status: string; client?: { id: number; name: string } | null };
+  summary: { reservedInStockRoom: number; releasedToProject: number; receivedAtProject: number; usedOrConsumed: number; excessPendingReturn: number; returnedToStockRoom: number; defectiveOrRepair: number };
+  items: ProjectInventoryItem[];
+  receipts: { id: number; transactionId: number; status: string; createdAt: string; receivedAt?: string | null; InventoryTransaction?: InventoryTransactionRecord }[];
+  excessDeclarations: PendingExcessDeclaration[];
+  history: InventoryTransactionRecord[];
+}
+
+export interface InventoryProjectSummary {
+  id: number;
+  name: string;
+  projectCode?: string | null;
+  status: string;
+  client?: { id: number; name: string } | null;
+  reservedItemTypes: number;
+  releasedItemTypes: number;
+  excessItemsPendingReturn: number;
+  latestInventoryActivity?: { transactionNo: string; transactionType: string; createdAt: string } | null;
+}
+
+export interface PendingExcessLine {
+  id: number;
+  inventoryItemId: number;
+  declaredQty: number;
+  condition: string;
+  reason?: string | null;
+  item?: Pick<InventoryItem, 'id' | 'name' | 'sku' | 'barcode' | 'unit'>;
+}
+
+export interface PendingExcessDeclaration {
+  id: number;
+  declarationNo: string;
+  projectId: number;
+  status: string;
+  declaredAt: string;
+  project?: { id: number; name: string; projectCode?: string | null };
+  lines?: PendingExcessLine[];
+  ExcessDeclarationLine?: PendingExcessLine[];
+}
+
+export type OfflineInventoryStatus = 'SAVED_OFFLINE' | 'WAITING_TO_SYNC' | 'SYNCHRONIZED' | 'SYNC_CONFLICT';
+
+export interface OfflineInventoryOperation {
+  id: string;
+  endpoint: string;
+  method: 'POST' | 'PUT';
+  label: string;
+  body: object;
+  idempotencyKey: string;
+  status: OfflineInventoryStatus;
+  createdAt: string;
+  retryCount: number;
+  lastError?: string | null;
 }
