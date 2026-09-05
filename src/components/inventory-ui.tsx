@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { ChevronLeft, ChevronRight, ClipboardList, Clock3, House, ScanLine, UserRound } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, FolderKanban, House, ReceiptText, ScanLine, UserRound } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 import { BRAND, SHADOW, TYPE } from '@/constants/brand';
@@ -135,18 +135,18 @@ export function Stepper({ current, labels }: { current: number; labels: string[]
   );
 }
 
-export function WorkflowBottomBar({ active = 'tasks' }: { active?: 'home' | 'tasks' | 'scan' | 'history' | 'account' }) {
+export function WorkflowBottomBar({ active = 'transactions' }: { active?: 'home' | 'projects' | 'scan' | 'transactions' | 'account' | 'tasks' | 'history' }) {
   const items = [
     { key: 'home', label: 'Home', icon: House, href: '/dashboard' },
-    { key: 'tasks', label: 'Tasks', icon: ClipboardList, href: '/tasks' },
+    { key: 'projects', label: 'Projects', icon: FolderKanban, href: '/projects' },
     { key: 'scan', label: 'Scan', icon: ScanLine, href: '/scanner' },
-    { key: 'history', label: 'History', icon: Clock3, href: '/history' },
+    { key: 'transactions', label: 'Transactions', icon: ReceiptText, href: '/history' },
     { key: 'account', label: 'Account', icon: UserRound, href: '/account' },
   ] as const;
   return (
     <View style={styles.workflowBar}>
       {items.map((item) => {
-        const selected = active === item.key;
+        const selected = active === item.key || (active === 'tasks' && item.key === 'transactions') || (active === 'history' && item.key === 'transactions');
         const Icon = item.icon;
         if (item.key === 'scan') return <Pressable key={item.key} onPress={() => router.navigate(item.href as never)} style={styles.workflowScanWrap}><View style={styles.workflowScan}><Icon size={28} color={BRAND.white} strokeWidth={2.1} /></View><Text style={styles.workflowLabel}>Scan</Text></Pressable>;
         return <Pressable key={item.key} onPress={() => router.navigate(item.href as never)} style={styles.workflowItem}><Icon size={25} color={selected ? BRAND.red : BRAND.inkSoft} strokeWidth={selected ? 2.3 : 1.8} /><Text style={[styles.workflowLabel, selected && styles.workflowLabelActive]}>{item.label}</Text></Pressable>;
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   statCard: { minHeight: 158, paddingHorizontal: 14, paddingVertical: 18, alignItems: 'center', justifyContent: 'center' },
   statLabel: { marginTop: 12, color: BRAND.inkSoft, fontFamily: TYPE.body, fontSize: 14, lineHeight: 18, fontWeight: '500', textAlign: 'center' },
   statValue: { marginTop: 5, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 27, lineHeight: 32, fontWeight: '700', letterSpacing: -0.5 },
-  actionCard: { minHeight: 172, padding: 16, justifyContent: 'space-between' },
+  actionCard: { minHeight: 172, flexGrow: 1, flexBasis: '45%', padding: 16, justifyContent: 'space-between' },
   actionFooter: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionLabel: { flex: 1, color: BRAND.ink, fontFamily: TYPE.body, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   sectionTitleRow: { marginTop: 26, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

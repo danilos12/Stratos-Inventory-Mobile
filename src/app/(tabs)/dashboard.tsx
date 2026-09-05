@@ -2,27 +2,35 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import {
-  AlertTriangle, Bell, Bookmark, Box, Check, ChevronDown, ChevronRight, ClipboardCheck,
-  ClipboardList, Download, RotateCcw, ScanLine, Upload,
+  AlertTriangle, Bell, Bookmark, Box, Boxes, Check, ChevronDown, ChevronRight, ClipboardCheck,
+  Download, FolderKanban, PackageCheck, RotateCcw, ScanLine, ShieldCheck, Upload, WifiOff,
 } from 'lucide-react-native';
 
 import { ActionCard, IconBadge, SectionTitle, StatCard, StatusChip, Surface } from '@/components/inventory-ui';
 import { Screen } from '@/components/ui';
 import { BRAND, SHADOW, TYPE } from '@/constants/brand';
 import { openOperationalTask } from '@/lib/inventory-navigation';
+import { canApproveInventory, canManageStockRoom } from '@/lib/inventory-rules';
+import { useAuth } from '@/providers/auth-provider';
 import { useSyncedData } from '@/providers/data-provider';
+import { useOfflineInventory } from '@/providers/offline-inventory-provider';
 import type { OperationalTask, WarehouseAccess } from '@/types/domain';
 
 const taskAccent = (task: OperationalTask) => task.kind === 'STOCK_IN' ? 'red' : task.kind === 'RELEASE' ? 'blue' : task.kind === 'COUNT' ? 'violet' : task.kind === 'RETURN' ? 'green' : 'amber';
 
 export default function DashboardScreen() {
   const { width } = useWindowDimensions();
+  const { session } = useAuth();
   const { workspace, refreshing, refresh, selectWarehouse } = useSyncedData();
+  const { pendingCount, conflictCount } = useOfflineInventory();
   const [roomsOpen, setRoomsOpen] = useState(false);
   const selectedRoom = workspace.warehouses.find((room) => room.id === workspace.selectedWarehouseId) || workspace.warehouses[0];
   const columns = width >= 720 ? 4 : 2;
   const cellWidth = `${100 / columns}%` as const;
   const today = useMemo(() => workspace.tasks.filter((task) => task.status !== 'DONE').slice(0, 3), [workspace.tasks]);
+  const role = session?.workspace.effectiveRole || session?.user.systemRole;
+  const managesStockRoom = canManageStockRoom(role);
+  const canApprove = canApproveInventory(role);
 
   return (
     <Screen refreshing={refreshing} onRefresh={refresh} contentStyle={styles.screen}>
@@ -41,21 +49,27 @@ export default function DashboardScreen() {
 
       <Pressable onPress={() => router.push('/scanner')} style={({ pressed }) => [styles.scanHero, pressed && styles.pressed]}>
         <ScanLine size={35} color={BRAND.red} strokeWidth={2.1} />
-        <Text style={styles.scanHeroText}>Scan Item</Text>
+        <Text style={styles.scanHeroText}>Scan Item or Container</Text>
       </Pressable>
 
       <View style={styles.grid}>
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<Box size={26} color={BRAND.green} />} label="On Hand" value={workspace.summary.onHand} accent="green" onPress={() => router.push('/inventory?filter=ALL')} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<PackageCheck size={26} color={BRAND.green} />} label="Available" value={workspace.summary.available ?? Math.max(0, workspace.summary.onHand - workspace.summary.reserved)} accent="green" onPress={() => router.push('/inventory?filter=AVAILABLE' as never)} /></View>
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<Bookmark size={26} color={BRAND.blue} />} label="Reserved" value={workspace.summary.reserved} accent="blue" onPress={() => router.push('/inventory?filter=RESERVED')} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<Upload size={26} color={BRAND.violet} />} label="Released to Projects" value={workspace.summary.releasedToProjects || 0} accent="violet" onPress={() => router.push('/projects' as never)} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<RotateCcw size={26} color={BRAND.blue} />} label="Excess Pending Return" value={workspace.summary.excessPendingReturn || 0} accent="blue" onPress={() => router.push('/receive-excess' as never)} /></View>
         <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<AlertTriangle size={27} color={BRAND.amber} />} label="Low Stock" value={workspace.summary.lowStock} accent="amber" onPress={() => router.push('/inventory?filter=LOW')} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><StatCard icon={<ClipboardList size={27} color={BRAND.violet} />} label="Pending Tasks" value={workspace.summary.pendingTasks} accent="violet" onPress={() => router.push('/tasks' as never)} /></View>
       </View>
 
       <View style={[styles.grid, styles.actionGrid]}>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Download size={29} color={BRAND.green} />} label="Stock In" accent="green" onPress={() => router.push('/tasks?kind=STOCK_IN' as never)} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Upload size={29} color={BRAND.red} />} label="Release / Issue" accent="red" onPress={() => router.push('/tasks?kind=RELEASE' as never)} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<RotateCcw size={30} color={BRAND.blue} />} label="Return Item" accent="blue" onPress={() => router.push('/return-item' as never)} /></View>
-        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<ClipboardCheck size={29} color={BRAND.violet} />} label="Physical Count" accent="violet" onPress={() => router.push('/tasks?kind=COUNT' as never)} /></View>
+        {managesStockRoom ? <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Download size={29} color={BRAND.green} />} label="Stock In" accent="green" onPress={() => router.push('/stock-in' as never)} /></View> : null}
+        {managesStockRoom ? <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Upload size={29} color={BRAND.red} />} label="Stock Out" accent="red" onPress={() => router.push('/stock-out' as never)} /></View> : null}
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<FolderKanban size={30} color={BRAND.blue} />} label="Projects" accent="blue" onPress={() => router.push('/projects' as never)} /></View>
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<RotateCcw size={30} color={BRAND.blue} />} label="Declare Excess" accent="blue" onPress={() => router.push('/declare-excess' as never)} /></View>
+        {managesStockRoom ? <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<Boxes size={30} color={BRAND.green} />} label="Receive Excess" accent="green" onPress={() => router.push('/receive-excess' as never)} /></View> : null}
+        {managesStockRoom ? <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<ClipboardCheck size={29} color={BRAND.violet} />} label="Physical Count" accent="violet" onPress={() => router.push('/tasks?kind=COUNT' as never)} /></View> : null}
+        {canApprove ? <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<ShieldCheck size={29} color={BRAND.amber} />} label="Pending Approvals" accent="amber" onPress={() => router.push('/tasks' as never)} /></View> : null}
+        <View style={[styles.gridCell, { width: cellWidth }]}><ActionCard icon={<WifiOff size={29} color={conflictCount ? BRAND.red : BRAND.violet} />} label={`Pending Sync${pendingCount || conflictCount ? ` (${pendingCount + conflictCount})` : ''}`} accent={conflictCount ? 'red' : 'violet'} onPress={() => router.push('/pending-sync' as never)} /></View>
       </View>
 
       <SectionTitle action="View all" onAction={() => router.push('/tasks' as never)}>Today’s Tasks</SectionTitle>

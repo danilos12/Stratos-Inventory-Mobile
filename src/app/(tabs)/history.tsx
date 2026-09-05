@@ -5,10 +5,10 @@ import { ClipboardCheck, Download, RefreshCcw, SlidersHorizontal, Upload } from 
 import { IconBadge, Surface } from '@/components/inventory-ui';
 import { EmptyState, Screen, Title } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
-import { fetchInventoryHistory } from '@/lib/api';
+import { fetchInventoryHistory, fetchInventoryTransactions } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { useSyncedData } from '@/providers/data-provider';
-import type { InventoryHistoryEntry } from '@/types/domain';
+import type { InventoryHistoryEntry, InventoryTransactionRecord } from '@/types/domain';
 
 type Filter = 'ALL' | InventoryHistoryEntry['type'];
 const filters: Filter[] = ['ALL', 'STOCK_IN', 'RELEASE', 'RETURN', 'COUNT'];
@@ -19,6 +19,11 @@ function entryVisual(type: InventoryHistoryEntry['type']) {
   if (type === 'RETURN') return { accent: 'blue' as const, icon: <RefreshCcw size={22} color={BRAND.blue} /> };
   if (type === 'COUNT') return { accent: 'violet' as const, icon: <ClipboardCheck size={22} color={BRAND.violet} /> };
   return { accent: 'amber' as const, icon: <SlidersHorizontal size={22} color={BRAND.amber} /> };
+}
+
+function transactionHistory(record: InventoryTransactionRecord): InventoryHistoryEntry {
+  const type: InventoryHistoryEntry['type'] = record.transactionType === 'STOCK_IN' ? 'STOCK_IN' : record.transactionType === 'STOCK_OUT' ? 'RELEASE' : record.transactionType === 'PHYSICAL_COUNT' ? 'COUNT' : record.transactionType.includes('CONTAINER') ? 'ADJUSTMENT' : 'RETURN';
+  return { id: `multi-${record.id}`, type, title: record.transactionNo, subtitle: `${record.purpose.replaceAll('_', ' ')} · ${record.InventoryTransactionLine.length} item types · ${record.syncStatus.replaceAll('_', ' ')}`, status: record.status, quantity: record.InventoryTransactionLine.reduce((sum, line) => sum + line.qty, 0), occurredAt: record.completedAt || record.createdAt };
 }
 
 export default function HistoryScreen() {
@@ -35,8 +40,8 @@ export default function HistoryScreen() {
     const task = setTimeout(() => {
       if (!token || !warehouseId) { if (active) setHistory(workspace.history); return; }
       if (active) setHistoryLoading(true);
-      void fetchInventoryHistory(token, warehouseId, mine)
-        .then((response) => { if (active) setHistory(response.data); })
+      void Promise.all([fetchInventoryHistory(token, warehouseId, mine), fetchInventoryTransactions(token, warehouseId)])
+        .then(([response, multi]) => { if (active) setHistory([...multi.data.map(transactionHistory), ...response.data].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))); })
         .catch(() => { if (active) setHistory(workspace.history); })
         .finally(() => { if (active) setHistoryLoading(false); });
     }, 0);
@@ -47,14 +52,14 @@ export default function HistoryScreen() {
     await refresh();
     if (!session?.token || !warehouseId) return;
     setHistoryLoading(true);
-    try { const response = await fetchInventoryHistory(session.token, warehouseId, mine); setHistory(response.data); }
+    try { const [response, multi] = await Promise.all([fetchInventoryHistory(session.token, warehouseId, mine), fetchInventoryTransactions(session.token, warehouseId)]); setHistory([...multi.data.map(transactionHistory), ...response.data].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))); }
     catch { setHistory(workspace.history); }
     finally { setHistoryLoading(false); }
   }
 
   return (
     <Screen refreshing={refreshing || historyLoading} onRefresh={refreshHistory} contentStyle={styles.screen}>
-      <Title style={styles.title}>History</Title>
+      <Title style={styles.title}>Transactions</Title>
       <Text style={styles.subtitle}>Completed activity in {workspace.warehouses.find((room) => room.id === workspace.selectedWarehouseId)?.name || 'this stock room'}</Text>
       <View style={styles.mineRow}><View><Text style={styles.mineTitle}>My activity</Text><Text style={styles.mineHelp}>Only actions completed by you</Text></View><Switch value={mine} onValueChange={setMine} trackColor={{ false: BRAND.line, true: '#F29AB0' }} thumbColor={mine ? BRAND.red : BRAND.white} /></View>
       <View style={styles.filters}>{filters.map((value) => <Pressable key={value} onPress={() => setFilter(value)} style={[styles.filter, value === filter && styles.filterActive]}><Text style={[styles.filterText, value === filter && styles.filterTextActive]}>{value === 'ALL' ? 'All' : value.replace('_', ' ').toLowerCase()}</Text></Pressable>)}</View>

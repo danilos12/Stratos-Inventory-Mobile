@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import type { AdditionalFormFieldSubmission } from '@/components/additional-form-fields';
+
 import type {
   AffiliateContext,
   GoogleAuthConfig,
@@ -22,6 +24,12 @@ import type {
   ProjectMaterial,
   RegistrationAffiliate,
   StratosProject,
+  StockRoomMap,
+  StorageContainer,
+  InventoryCartLine,
+  InventoryTransactionRecord,
+  ProjectInventoryWorkspace,
+  PendingExcessDeclaration,
 } from '@/types/domain';
 
 const defaultBaseUrl = Platform.OS === 'web' ? 'http://localhost:2588' : 'http://10.0.2.2:2588';
@@ -235,6 +243,7 @@ export async function receivePurchaseOrder(token: string, id: number, input: {
   receivedDate?: string;
   idempotencyKey: string;
   evidenceId?: number | null;
+  additionalFields?: AdditionalFormFieldSubmission[];
 }) {
   return apiRequest<{ message: string }>(`/api/inventory/purchase-orders/${id}/receive`, {
     method: 'POST', token, body: JSON.stringify(input),
@@ -251,7 +260,7 @@ export async function saveReleaseScan(token: string, id: number, input: { lineId
   });
 }
 
-export async function completeReleaseWorkOrder(token: string, id: number, input: { signatureStrokes: number[][][]; conditionAcknowledged: boolean; idempotencyKey: string }) {
+export async function completeReleaseWorkOrder(token: string, id: number, input: { signatureStrokes: number[][][]; conditionAcknowledged: boolean; idempotencyKey: string; additionalFields?: AdditionalFormFieldSubmission[] }) {
   return apiRequest<{ message: string }>(`/api/mobile/inventory/releases/${id}/complete`, {
     method: 'POST', token, body: JSON.stringify(input),
   });
@@ -273,6 +282,7 @@ export async function submitInventoryReturn(token: string, input: {
   evidenceIds?: number[];
   inspected: boolean;
   idempotencyKey: string;
+  additionalFields?: AdditionalFormFieldSubmission[];
 }) {
   return apiRequest<{ message: string }>('/api/mobile/inventory/returns', { method: 'POST', token, body: JSON.stringify(input) });
 }
@@ -291,8 +301,10 @@ export async function savePhysicalCountLine(token: string, sessionId: number, li
   });
 }
 
-export async function submitPhysicalCount(token: string, id: number) {
-  return apiRequest<{ message: string }>(`/api/mobile/inventory/counts/${id}/submit`, { method: 'POST', token });
+export async function submitPhysicalCount(token: string, id: number, additionalFields?: AdditionalFormFieldSubmission[]) {
+  return apiRequest<{ message: string }>(`/api/mobile/inventory/counts/${id}/submit`, {
+    method: 'POST', token, ...(additionalFields?.length ? { body: JSON.stringify({ additionalFields }) } : {}),
+  });
 }
 
 export async function uploadWorkflowPhoto(token: string, input: { uri: string; fileName?: string | null; mimeType?: string | null; kind: string }) {
@@ -300,6 +312,13 @@ export async function uploadWorkflowPhoto(token: string, input: { uri: string; f
   form.append('kind', input.kind);
   form.append('file', { uri: input.uri, name: input.fileName || `inventory-${Date.now()}.jpg`, type: input.mimeType || 'image/jpeg' } as any);
   return apiRequest<{ id: number; url: string }>('/api/mobile/inventory/evidence', { method: 'POST', token, body: form });
+}
+
+export async function uploadProjectWorkflowPhoto(token: string, projectId: number, input: { uri: string; fileName?: string | null; mimeType?: string | null; kind: string }) {
+  const form = new FormData();
+  form.append('kind', input.kind);
+  form.append('file', { uri: input.uri, name: input.fileName || `project-inventory-${Date.now()}.jpg`, type: input.mimeType || 'image/jpeg' } as any);
+  return apiRequest<{ id: number; url: string }>(`/api/mobile/inventory/projects/${projectId}/evidence`, { method: 'POST', token, body: form });
 }
 
 export async function fetchProjects(token: string) {
@@ -372,7 +391,7 @@ export async function updateMaterialConsumption(token: string, materialId: numbe
 export async function requestProjectRelease(
   token: string,
   itemId: number,
-  input: { projectId: number; qty: number; note?: string },
+  input: { projectId: number; qty: number; note?: string; additionalFields?: AdditionalFormFieldSubmission[] },
 ) {
   return apiRequest<{ message: string }>(`/api/inventory/items/${itemId}/release`, {
     method: 'POST',
@@ -384,6 +403,114 @@ export async function requestProjectRelease(
       note: input.note?.trim() || null,
     }),
   });
+}
+
+export async function fetchStockRoomMap(token: string, stockRoomId: number) {
+  return apiRequest<StockRoomMap>(`/api/mobile/inventory/stock-room-map?stockRoomId=${stockRoomId}`, { token });
+}
+
+export async function resolveStorageScan(token: string, stockRoomId: number, code: string) {
+  return apiRequest<{ type: 'SHELF' | 'CONTAINER'; id: number; code: string; title: string }>('/api/mobile/inventory/storage/resolve', {
+    method: 'POST', token, body: JSON.stringify({ stockRoomId, code }),
+  });
+}
+
+export async function createStorageEntity(token: string, input: { stockRoomId: number; kind: 'RACK' | 'SHELF' | 'CONTAINER'; name: string; code: string; barcode: string; rackId?: number; shelfId?: number; storageMethod?: string; type?: string; projectId?: number; notes?: string }) {
+  return apiRequest<{ message: string; data: { id: number } }>('/api/mobile/inventory/storage', { method: 'POST', token, body: JSON.stringify(input) });
+}
+
+export async function fetchStorageContainer(token: string, id: string | number) {
+  return apiRequest<StorageContainer>(`/api/mobile/inventory/containers/${encodeURIComponent(String(id))}`, { token });
+}
+
+export async function fetchStockRoomShelf(token: string, id: string | number) {
+  return apiRequest<import('@/types/domain').StockRoomShelfDetails>(`/api/mobile/inventory/shelves/${encodeURIComponent(String(id))}`, { token });
+}
+
+export async function addContainerItems(token: string, containerId: number, input: { lines: InventoryCartLine[]; idempotencyKey: string; deviceId?: string }) {
+  return apiRequest<{ message: string; transactionId: number; duplicate?: boolean }>(`/api/mobile/inventory/containers/${containerId}/items`, {
+    method: 'POST', token, body: JSON.stringify(input),
+  });
+}
+
+export async function removeContainerItems(token: string, containerId: number, input: { lines: InventoryCartLine[]; shelfId?: number; idempotencyKey: string; deviceId?: string }) {
+  return apiRequest<{ message: string; transactionId: number; duplicate?: boolean }>(`/api/mobile/inventory/containers/${containerId}/remove-items`, {
+    method: 'POST', token, body: JSON.stringify(input),
+  });
+}
+
+export async function submitContainerCount(token: string, containerId: number, input: { lines: { itemId: number; batchId?: number | null; expectedQty: number; countedQty: number; unit?: string; condition?: string }[]; notes?: string; idempotencyKey: string; deviceId?: string }) {
+  return apiRequest<{ message: string; transactionId: number; duplicate?: boolean }>(`/api/mobile/inventory/containers/${containerId}/count`, {
+    method: 'POST', token, body: JSON.stringify(input),
+  });
+}
+
+export async function moveStorageContainer(token: string, containerId: number, shelfId: number) {
+  return apiRequest<{ message: string }>(`/api/mobile/inventory/containers/${containerId}/move`, { method: 'POST', token, body: JSON.stringify({ shelfId }) });
+}
+
+export interface MultiStockInInput {
+  stockRoomId: number;
+  source: 'SUPPLIER_DELIVERY' | 'EXCESS_FROM_PROJECT' | 'DEMO_RETURN' | 'SAMPLE_RETURN' | 'REPAIR_RETURN' | 'OPENING_STOCK_OR_ADJUSTMENT';
+  destination: 'GENERAL_STOCK' | 'RESERVE_FOR_PROJECT';
+  projectId?: number;
+  lines: InventoryCartLine[];
+  evidenceIds?: number[];
+  notes?: string;
+  idempotencyKey: string;
+  deviceId?: string;
+}
+
+export async function submitMultiStockIn(token: string, input: MultiStockInInput) {
+  return apiRequest<{ message: string; transactionId: number; transactionNo?: string; duplicate?: boolean }>('/api/mobile/inventory/transactions/stock-in', { method: 'POST', token, body: JSON.stringify(input) });
+}
+
+export interface MultiStockOutInput {
+  stockRoomId: number;
+  purpose: 'PROJECT' | 'DEMO' | 'SAMPLE' | 'REPAIR' | 'APPROVED_DISPOSAL';
+  projectId?: number;
+  recipientUserId?: number;
+  recipientName?: string;
+  expectedReturnAt?: string;
+  signatureStrokes?: number[][][];
+  evidenceIds?: number[];
+  notes?: string;
+  lines: InventoryCartLine[];
+  idempotencyKey: string;
+  deviceId?: string;
+}
+
+export async function submitMultiStockOut(token: string, input: MultiStockOutInput) {
+  return apiRequest<{ message: string; transactionId: number; transactionNo?: string; duplicate?: boolean }>('/api/mobile/inventory/transactions/stock-out', { method: 'POST', token, body: JSON.stringify(input) });
+}
+
+export async function fetchInventoryTransactions(token: string, stockRoomId?: number, projectId?: number) {
+  const query = new URLSearchParams(); if (stockRoomId) query.set('stockRoomId', String(stockRoomId)); if (projectId) query.set('projectId', String(projectId));
+  return apiRequest<{ data: InventoryTransactionRecord[] }>(`/api/mobile/inventory/transactions?${query.toString()}`, { token });
+}
+
+export async function fetchProjectInventory(token: string, projectId: number) {
+  return apiRequest<ProjectInventoryWorkspace>(`/api/mobile/inventory/projects/${projectId}`, { token });
+}
+
+export async function fetchInventoryProjects(token: string) {
+  return apiRequest<{ data: import('@/types/domain').InventoryProjectSummary[] }>('/api/mobile/inventory/projects', { token });
+}
+
+export async function confirmProjectInventoryReceipt(token: string, projectId: number, receiptId: number, input: { lines: { itemId: number; qty: number; condition: string }[]; signatureStrokes: number[][][]; discrepancyNote?: string; evidenceIds?: number[] }) {
+  return apiRequest<{ message: string; status: string }>(`/api/mobile/inventory/projects/${projectId}/receipts/${receiptId}/confirm`, { method: 'POST', token, body: JSON.stringify(input) });
+}
+
+export async function submitProjectExcess(token: string, projectId: number, input: { lines: { itemId: number; qty: number; condition: string; reason?: string; containerId?: number; evidenceIds?: number[] }[]; notes?: string; idempotencyKey: string; deviceId?: string }) {
+  return apiRequest<{ message: string; declarationId: number; declarationNo?: string; duplicate?: boolean }>(`/api/mobile/inventory/projects/${projectId}/excess`, { method: 'POST', token, body: JSON.stringify(input) });
+}
+
+export async function fetchPendingExcess(token: string) {
+  return apiRequest<{ data: PendingExcessDeclaration[] }>('/api/mobile/inventory/excess/pending', { token });
+}
+
+export async function acceptProjectExcess(token: string, id: number, input: { stockRoomId: number; notes?: string; lines: { lineId: number; goodQty: number; defectiveQty: number; missingQty: number; condition: string; shelfId?: number; containerId?: number; evidenceIds?: number[] }[] }) {
+  return apiRequest<{ message: string }>(`/api/mobile/inventory/excess/${id}/accept`, { method: 'POST', token, body: JSON.stringify(input) });
 }
 
 export function absoluteAssetUrl(path?: string | null) {

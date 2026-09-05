@@ -6,7 +6,8 @@ import { Camera, Flashlight, RotateCcw, ScanLine } from 'lucide-react-native';
 
 import { Body, Card, LoadingScreen, Pill, PrimaryButton, Screen, Title } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
-import { resolveInventoryScan } from '@/lib/api';
+import { ApiError, resolveInventoryScan, resolveStorageScan } from '@/lib/api';
+import { useScanFeedback } from '@/lib/scan-feedback';
 import { useAuth } from '@/providers/auth-provider';
 import { useSyncedData } from '@/providers/data-provider';
 import type { ScanResolution } from '@/types/domain';
@@ -14,6 +15,7 @@ import type { ScanResolution } from '@/types/domain';
 export default function ScannerScreen() {
   const { session } = useAuth();
   const { selectedWarehouseId } = useSyncedData();
+  const { playScanError, playScanSuccess } = useScanFeedback();
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState(true);
   const [scanned, setScanned] = useState(false);
@@ -31,10 +33,17 @@ export default function ScannerScreen() {
     if (scanned || !session) return;
     setScanned(true); setLoading(true); setMessage(null);
     try {
-      const resolved = await resolveInventoryScan(session.token, data, selectedWarehouseId);
+      let resolved: ScanResolution | null = null;
+      if (selectedWarehouseId) {
+        try { resolved = await resolveStorageScan(session.token, selectedWarehouseId, data); }
+        catch (error) { if (!(error instanceof ApiError) || error.status !== 404) throw error; }
+      }
+      if (!resolved) resolved = await resolveInventoryScan(session.token, data, selectedWarehouseId);
       setResult(resolved);
-      if (!resolved) setMessage('No match for this code.');
+      if (resolved) playScanSuccess();
+      else { playScanError(); setMessage('No match for this code.'); }
     } catch (error) {
+      playScanError();
       setMessage(error instanceof Error ? error.message : 'Lookup failed.');
     } finally { setLoading(false); }
   }
@@ -43,7 +52,9 @@ export default function ScannerScreen() {
 
   function openResult() {
     if (!result) return;
-    if (result.type === 'ITEM') router.push({ pathname: '/inventory/[id]', params: { id: String(result.id) } });
+    if (result.type === 'CONTAINER') router.push({ pathname: '/container/[id]', params: { id: String(result.id) } } as never);
+    else if (result.type === 'SHELF') router.push({ pathname: '/shelf/[id]', params: { id: String(result.id) } } as never);
+    else if (result.type === 'ITEM') router.push({ pathname: '/inventory/[id]', params: { id: String(result.id) } });
     else if (result.type === 'RELEASE') router.push({ pathname: '/release-work/[id]', params: { id: String(result.id) } } as never);
     else if (result.type === 'RETURN') router.push({ pathname: '/return-item', params: { outId: String(result.id), code: result.code } } as never);
     else if (result.type === 'COUNT') router.push({ pathname: '/physical-count/[id]', params: { id: String(result.id) } } as never);

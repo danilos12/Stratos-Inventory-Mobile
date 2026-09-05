@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { AlertTriangle, Check, Folder, MapPin, MinusCircle, RefreshCcw, ScanLine, UserRound, Wrench } from 'lucide-react-native';
 
 import { IconBadge, PageHeader, RedButton, StatusChip, Surface, WorkflowBottomBar } from '@/components/inventory-ui';
+import { AdditionalFormFields, mergeAdditionalFieldsIntoNotes, toAdditionalFieldSubmissions, type AdditionalFormField } from '@/components/additional-form-fields';
 import { PhotoEvidence, type LocalPhoto } from '@/components/photo-evidence';
 import { Screen } from '@/components/ui';
 import { BRAND, TYPE } from '@/constants/brand';
@@ -26,6 +27,7 @@ export default function ReturnItemScreen() {
   const params = useLocalSearchParams<{ code?: string; outId?: string }>(); const { session } = useAuth(); const { selectedWarehouseId, refresh } = useSyncedData();
   const [lookup, setLookup] = useState(params.code || params.outId || ''); const [work, setWork] = useState<IssuedItemWork | null>(null); const [loading, setLoading] = useState(false); const [submitting, setSubmitting] = useState(false);
   const [condition, setCondition] = useState<Condition>('GOOD'); const [quantity, setQuantity] = useState('1'); const [location, setLocation] = useState(''); const [remarks, setRemarks] = useState(''); const [photos, setPhotos] = useState<LocalPhoto[]>([]); const [inspected, setInspected] = useState(false);
+  const [additionalFields, setAdditionalFields] = useState<AdditionalFormField[]>([]);
 
   const resolve = useCallback(async () => { if (!session || !selectedWarehouseId || !lookup.trim()) return; setLoading(true); try { const result = await resolveIssuedItem(session.token, lookup.trim(), selectedWarehouseId); setWork(result); setQuantity(String(Math.min(1, result.quantityReturnable))); } catch (error) { Alert.alert('Issued item not found', error instanceof Error ? error.message : 'No active issue matches this code.'); } finally { setLoading(false); } }, [lookup, selectedWarehouseId, session]);
   useEffect(() => { if (!params.code && !params.outId) return; const task = setTimeout(resolve, 0); return () => clearTimeout(task); }, [params.code, params.outId, resolve]);
@@ -39,7 +41,7 @@ export default function ReturnItemScreen() {
     setSubmitting(true);
     try {
       const uploaded = await Promise.all(photos.map((photo) => uploadWorkflowPhoto(session.token, { ...photo, kind: 'RETURN_CONDITION' })));
-      await submitInventoryReturn(session.token, { outId: work.outId, warehouseId: selectedWarehouseId, quantity: qty, condition, locationCode: location.trim(), remarks: remarks.trim() || null, evidenceIds: uploaded.map((file) => file.id), inspected: true, idempotencyKey: Crypto.randomUUID() });
+      await submitInventoryReturn(session.token, { outId: work.outId, warehouseId: selectedWarehouseId, quantity: qty, condition, locationCode: location.trim(), remarks: mergeAdditionalFieldsIntoNotes(remarks, additionalFields), evidenceIds: uploaded.map((file) => file.id), inspected: true, idempotencyKey: Crypto.randomUUID(), ...(additionalFields.length ? { additionalFields: toAdditionalFieldSubmissions(additionalFields) } : {}) });
       await refresh(); Alert.alert('Return completed', condition === 'GOOD' ? 'The item is available in stock again.' : 'The item was routed for review.', [{ text: 'Done', onPress: () => router.replace('/history' as never) }]);
     } catch (error) { Alert.alert('Return not completed', error instanceof Error ? error.message : 'Please retry.'); } finally { setSubmitting(false); }
   }
@@ -55,8 +57,9 @@ export default function ReturnItemScreen() {
           <PhotoEvidence label="Add Item Photos" hint={condition === 'GOOD' ? 'Optional for items in good condition' : 'Required for this condition'} photos={photos} onChange={setPhotos} multiple />
           <Text style={styles.fieldLabel}>Remarks</Text><TextInput value={remarks} onChangeText={setRemarks} multiline textAlignVertical="top" placeholder="Describe the returned condition" placeholderTextColor={BRAND.muted} style={[styles.input, styles.remarks]} />
           <Pressable onPress={() => setInspected((value) => !value)} style={styles.checkRow}><View style={[styles.checkbox, inspected && styles.checkboxActive]}>{inspected ? <Check size={18} color={BRAND.white} /> : null}</View><Text style={styles.checkText}>I inspected this item before returning it to stock</Text></Pressable>
-          <RedButton disabled={submitting} icon={<RefreshCcw size={23} color={BRAND.white} />} onPress={submit}>{submitting ? 'Completing…' : 'Complete Return'}</RedButton>
         </Surface>
+        <AdditionalFormFields fields={additionalFields} onChange={setAdditionalFields} />
+        <RedButton disabled={submitting} icon={<RefreshCcw size={23} color={BRAND.white} />} onPress={submit}>{submitting ? 'Completing…' : 'Complete Return'}</RedButton>
       </>}
     </Screen>
   );

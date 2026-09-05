@@ -1,10 +1,11 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronRight, UserRound } from 'lucide-react-native';
+import { Boxes, ChevronRight, UserRound } from 'lucide-react-native';
 
 import { BrandMark } from '@/components/brand-mark';
 import { Card, Screen, Title } from '@/components/ui';
 import { API_BASE_URL } from '@/lib/api';
+import { canManageStockRoom } from '@/lib/inventory-rules';
 import { BRAND, TYPE } from '@/constants/brand';
 import { useAuth } from '@/providers/auth-provider';
 import { useSyncedData } from '@/providers/data-provider';
@@ -12,6 +13,7 @@ import { useSyncedData } from '@/providers/data-provider';
 export default function AccountScreen() {
   const { session, offlineSession, signOut } = useAuth();
   const { inventory, lastSyncedAt } = useSyncedData();
+  const managesStockRoom = canManageStockRoom(session?.workspace.effectiveRole || session?.user.systemRole);
 
   function confirmSwitchEmail() {
     Alert.alert('Use a different email?', 'The current session and its offline inventory cache will be removed from this device.', [
@@ -45,6 +47,10 @@ export default function AccountScreen() {
         <View style={styles.rowMain}><Text style={styles.rowLabel}>Biometric sign-in</Text></View>
         <ChevronRight size={18} color={BRAND.muted} />
       </Pressable>
+      {managesStockRoom ? <Pressable onPress={() => router.push('/storage-setup' as never)} style={styles.rowLink}>
+        <Boxes size={19} color={BRAND.violet} /><View style={styles.rowMain}><Text style={styles.rowLabel}>Manage racks, shelves and containers</Text></View>
+        <ChevronRight size={18} color={BRAND.muted} />
+      </Pressable> : null}
 
       <Text style={styles.endpoint} numberOfLines={1}>{API_BASE_URL}</Text>
 
